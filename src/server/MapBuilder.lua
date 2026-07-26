@@ -1,8 +1,8 @@
 --!strict
 --[[
 	MapBuilder
-	Procedurally builds the test facility map on server start.
-	No manual Studio building required — syncs through Rojo.
+	Builds a fully connected facility with one continuous floor and
+	explicit wall segments (with real door openings between every room).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -12,13 +12,12 @@ local MapBuilder = {}
 
 local WALL_HEIGHT = 14
 local WALL_THICKNESS = 1
-
-type GapSide = "North" | "South" | "East" | "West"
+local FLOOR_TOP = 0
 
 local COLORS = {
-	Floor = Color3.fromRGB(35, 35, 40),
-	Wall = Color3.fromRGB(55, 55, 62),
-	Ceiling = Color3.fromRGB(28, 28, 32),
+	Floor = Color3.fromRGB(38, 38, 44),
+	Wall = Color3.fromRGB(58, 58, 66),
+	Ceiling = Color3.fromRGB(26, 26, 30),
 	Spawn = Color3.fromRGB(60, 120, 200),
 	FuelCell = Color3.fromRGB(255, 200, 50),
 	Generator = Color3.fromRGB(45, 50, 55),
@@ -28,8 +27,44 @@ local COLORS = {
 	Sign = Color3.fromRGB(200, 50, 50),
 }
 
+-- World-space layout bounds (X = east/west, Z = north/south)
+local MAP = {
+	MinX = -44,
+	MaxX = 44,
+	MinZ = -70,
+	MaxZ = 84,
+
+	HallMinX = -7,
+	HallMaxX = 7,
+
+	LobbyMinX = -26,
+	LobbyMaxX = 26,
+	LobbyMinZ = -66,
+	LobbyMaxZ = -30,
+
+	HallMinZ = -30,
+	HallMaxZ = 76,
+
+	WestRoomMaxX = -9,
+	OfficeMinZ = -14,
+	OfficeMaxZ = 14,
+	StorageMinZ = 18,
+	StorageMaxZ = 44,
+	GeneratorMinZ = 50,
+	GeneratorMaxZ = 76,
+
+	CafeteriaMinX = 9,
+	CafeteriaMaxX = 42,
+	CafeteriaMinZ = -10,
+	CafeteriaMaxZ = 34,
+}
+
 local function tag(instance: Instance, tagName: string)
 	CollectionService:AddTag(instance, tagName)
+end
+
+local function wallCenterY(): number
+	return FLOOR_TOP + WALL_HEIGHT / 2
 end
 
 local function createPart(props: {
@@ -38,9 +73,7 @@ local function createPart(props: {
 	CFrame: CFrame,
 	Color: Color3,
 	Material: Enum.Material?,
-	Transparency: number?,
 	Parent: Instance,
-	Anchored: boolean?,
 	CanCollide: boolean?,
 }): Part
 	local part = Instance.new("Part")
@@ -49,8 +82,7 @@ local function createPart(props: {
 	part.CFrame = props.CFrame
 	part.Color = props.Color
 	part.Material = props.Material or Enum.Material.Concrete
-	part.Transparency = props.Transparency or 0
-	part.Anchored = if props.Anchored == nil then true else props.Anchored
+	part.Anchored = true
 	part.CanCollide = if props.CanCollide == nil then true else props.CanCollide
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
@@ -58,171 +90,125 @@ local function createPart(props: {
 	return part
 end
 
-local function createWallSegment(parent: Instance, name: string, size: Vector3, position: Vector3)
+local function fillFloor(parent: Instance, minX: number, maxX: number, minZ: number, maxZ: number)
+	createPart({
+		Name = "Floor",
+		Size = Vector3.new(maxX - minX, 1, maxZ - minZ),
+		CFrame = CFrame.new((minX + maxX) / 2, FLOOR_TOP - 0.5, (minZ + maxZ) / 2),
+		Color = COLORS.Floor,
+		Material = Enum.Material.Slate,
+		Parent = parent,
+	})
+end
+
+local function fillCeiling(parent: Instance, minX: number, maxX: number, minZ: number, maxZ: number)
+	createPart({
+		Name = "Ceiling",
+		Size = Vector3.new(maxX - minX, 1, maxZ - minZ),
+		CFrame = CFrame.new((minX + maxX) / 2, FLOOR_TOP + WALL_HEIGHT + 0.5, (minZ + maxZ) / 2),
+		Color = COLORS.Ceiling,
+		Material = Enum.Material.SmoothPlastic,
+		Parent = parent,
+	})
+end
+
+-- Wall running east-west (constant Z)
+local function wallX(parent: Instance, name: string, z: number, minX: number, maxX: number)
+	if maxX <= minX then
+		return
+	end
 	createPart({
 		Name = name,
-		Size = size,
-		CFrame = CFrame.new(position),
+		Size = Vector3.new(maxX - minX, WALL_HEIGHT, WALL_THICKNESS),
+		CFrame = CFrame.new((minX + maxX) / 2, wallCenterY(), z),
 		Color = COLORS.Wall,
 		Material = Enum.Material.Brick,
 		Parent = parent,
 	})
 end
 
-local function createWallWithGap(
+local function wallXWithGap(
 	parent: Instance,
 	name: string,
-	axis: "X" | "Z",
-	center: Vector3,
-	length: number,
-	gapCenter: number,
-	gapWidth: number
+	z: number,
+	minX: number,
+	maxX: number,
+	gapMinX: number,
+	gapMaxX: number
 )
-	local segmentLength = (length - gapWidth) / 2
-	if segmentLength <= 0 then
+	wallX(parent, name .. "Left", z, minX, gapMinX)
+	wallX(parent, name .. "Right", z, gapMaxX, maxX)
+end
+
+-- Wall running north-south (constant X)
+local function wallZ(parent: Instance, name: string, x: number, minZ: number, maxZ: number)
+	if maxZ <= minZ then
 		return
 	end
-
-	if axis == "X" then
-		local z = center.Z
-		local y = center.Y
-		createWallSegment(
-			parent,
-			name .. "A",
-			Vector3.new(segmentLength, WALL_HEIGHT, WALL_THICKNESS),
-			Vector3.new(center.X - gapWidth / 2 - segmentLength / 2, y, z)
-		)
-		createWallSegment(
-			parent,
-			name .. "B",
-			Vector3.new(segmentLength, WALL_HEIGHT, WALL_THICKNESS),
-			Vector3.new(center.X + gapWidth / 2 + segmentLength / 2, y, z)
-		)
-	else
-		local x = center.X
-		local y = center.Y
-		createWallSegment(
-			parent,
-			name .. "A",
-			Vector3.new(WALL_THICKNESS, WALL_HEIGHT, segmentLength),
-			Vector3.new(x, y, center.Z - gapWidth / 2 - segmentLength / 2)
-		)
-		createWallSegment(
-			parent,
-			name .. "B",
-			Vector3.new(WALL_THICKNESS, WALL_HEIGHT, segmentLength),
-			Vector3.new(x, y, center.Z + gapWidth / 2 + segmentLength / 2)
-		)
-	end
+	createPart({
+		Name = name,
+		Size = Vector3.new(WALL_THICKNESS, WALL_HEIGHT, maxZ - minZ),
+		CFrame = CFrame.new(x, wallCenterY(), (minZ + maxZ) / 2),
+		Color = COLORS.Wall,
+		Material = Enum.Material.Brick,
+		Parent = parent,
+	})
 end
 
-local function createRoom(
+local function wallZWithGap(
 	parent: Instance,
 	name: string,
-	center: Vector3,
-	size: Vector3,
-	gaps: { [GapSide]: number? }?
-): Folder
-	local room = Instance.new("Folder")
-	room.Name = name
-	room.Parent = parent
-
-	local floorY = center.Y - WALL_HEIGHT / 2
-	local halfX = size.X / 2
-	local halfZ = size.Z / 2
-	local wallY = floorY + WALL_HEIGHT / 2
-
-	createPart({
-		Name = "Floor",
-		Size = Vector3.new(size.X, 1, size.Z),
-		CFrame = CFrame.new(center.X, floorY, center.Z),
-		Color = COLORS.Floor,
-		Material = Enum.Material.Slate,
-		Parent = room,
-	})
-
-	createPart({
-		Name = "Ceiling",
-		Size = Vector3.new(size.X, 1, size.Z),
-		CFrame = CFrame.new(center.X, floorY + WALL_HEIGHT + 0.5, center.Z),
-		Color = COLORS.Ceiling,
-		Material = Enum.Material.SmoothPlastic,
-		Parent = room,
-	})
-
-	local gapNorth = gaps and gaps.North
-	local gapSouth = gaps and gaps.South
-	local gapWest = gaps and gaps.West
-	local gapEast = gaps and gaps.East
-
-	if gapNorth then
-		createWallWithGap(room, "NorthWall", "X", Vector3.new(center.X, wallY, center.Z - halfZ), size.X, center.X, gapNorth)
-	else
-		createWallSegment(room, "NorthWall", Vector3.new(size.X, WALL_HEIGHT, WALL_THICKNESS), Vector3.new(center.X, wallY, center.Z - halfZ))
-	end
-
-	if gapSouth then
-		createWallWithGap(room, "SouthWall", "X", Vector3.new(center.X, wallY, center.Z + halfZ), size.X, center.X, gapSouth)
-	else
-		createWallSegment(room, "SouthWall", Vector3.new(size.X, WALL_HEIGHT, WALL_THICKNESS), Vector3.new(center.X, wallY, center.Z + halfZ))
-	end
-
-	if gapWest then
-		createWallWithGap(room, "WestWall", "Z", Vector3.new(center.X - halfX, wallY, center.Z), size.Z, center.Z, gapWest)
-	else
-		createWallSegment(room, "WestWall", Vector3.new(WALL_THICKNESS, WALL_HEIGHT, size.Z), Vector3.new(center.X - halfX, wallY, center.Z))
-	end
-
-	if gapEast then
-		createWallWithGap(room, "EastWall", "Z", Vector3.new(center.X + halfX, wallY, center.Z), size.Z, center.Z, gapEast)
-	else
-		createWallSegment(room, "EastWall", Vector3.new(WALL_THICKNESS, WALL_HEIGHT, size.Z), Vector3.new(center.X + halfX, wallY, center.Z))
-	end
-
-	return room
+	x: number,
+	minZ: number,
+	maxZ: number,
+	gapMinZ: number,
+	gapMaxZ: number
+)
+	wallZ(parent, name .. "South", x, minZ, gapMinZ)
+	wallZ(parent, name .. "North", x, gapMaxZ, maxZ)
 end
 
-local function createDoorway(parent: Instance, name: string, cframe: CFrame, size: Vector3)
-	local frame = Instance.new("Model")
-	frame.Name = name
-	frame.Parent = parent
+local function createDoor(parent: Instance, name: string, center: Vector3, size: Vector3)
+	local model = Instance.new("Model")
+	model.Name = name
+	model.Parent = parent
 
 	local door = createPart({
 		Name = "DoorPanel",
 		Size = size,
-		CFrame = cframe,
+		CFrame = CFrame.new(center),
 		Color = COLORS.Door,
 		Material = Enum.Material.Wood,
-		Parent = frame,
+		Parent = model,
 	})
 	door:SetAttribute("Locked", true)
 	door:SetAttribute("RequiresPower", true)
 	door:SetAttribute("RequiresKey", true)
 	tag(door, "Door")
-
-	return frame
 end
 
-local function createLabel(parent: Instance, text: string, offset: Vector3)
-	local anchor = createPart({
-		Name = text .. "Sign",
-		Size = Vector3.new(6, 2.5, 0.2),
-		CFrame = CFrame.new(offset),
+local function createSign(parent: Instance, text: string, position: Vector3)
+	local sign = createPart({
+		Name = `{text}Sign`,
+		Size = Vector3.new(8, 3, 0.3),
+		CFrame = CFrame.new(position),
 		Color = COLORS.Sign,
 		Material = Enum.Material.Neon,
 		Parent = parent,
 		CanCollide = false,
 	})
 
-	local gui = Instance.new("SurfaceGui")
-	gui.Face = Enum.NormalId.Front
-	gui.Parent = anchor
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(200, 50)
+	gui.StudsOffset = Vector3.new(0, 2, 0)
+	gui.AlwaysOnTop = true
+	gui.Parent = sign
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.Text = text
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextScaled = true
 	label.Font = Enum.Font.GothamBold
 	label.Parent = gui
@@ -239,7 +225,7 @@ local function createSpawn(parent: Instance, position: Vector3, index: number)
 	spawn.Duration = 0
 	spawn.Color = COLORS.Spawn
 	spawn.Material = Enum.Material.Neon
-	spawn.Transparency = 0.4
+	spawn.Transparency = 0.35
 	spawn.Parent = parent
 	tag(spawn, "Spawn")
 end
@@ -259,10 +245,8 @@ local function createFuelCell(parent: Instance, name: string, position: Vector3)
 	local light = Instance.new("PointLight")
 	light.Color = COLORS.FuelCell
 	light.Brightness = 2
-	light.Range = 12
+	light.Range = 14
 	light.Parent = cell
-
-	return cell
 end
 
 local function createGenerator(parent: Instance, position: Vector3)
@@ -282,19 +266,8 @@ local function createGenerator(parent: Instance, position: Vector3)
 	light.Name = "PowerLight"
 	light.Color = Color3.fromRGB(80, 255, 120)
 	light.Brightness = 0
-	light.Range = 20
+	light.Range = 22
 	light.Parent = generator
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "GeneratorPrompt"
-	prompt.ActionText = "Boot Generator"
-	prompt.ObjectText = "Generator"
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 10
-	prompt.Enabled = false
-	prompt.Parent = generator
-
-	return generator
 end
 
 local function createKey(parent: Instance, position: Vector3)
@@ -317,21 +290,12 @@ local function createKey(parent: Instance, position: Vector3)
 	})
 	key:SetAttribute("Collected", false)
 	tag(key, "Key")
-
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Take Key"
-	prompt.ObjectText = "Office Key"
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 8
-	prompt.Parent = key
-
-	return key
 end
 
 local function createLight(parent: Instance, position: Vector3)
 	local fixture = createPart({
-		Name = "LightFixture",
-		Size = Vector3.new(2, 0.5, 2),
+		Name = "Light",
+		Size = Vector3.new(2, 0.4, 2),
 		CFrame = CFrame.new(position),
 		Color = Color3.fromRGB(255, 240, 200),
 		Material = Enum.Material.Neon,
@@ -340,9 +304,74 @@ local function createLight(parent: Instance, position: Vector3)
 	})
 
 	local light = Instance.new("PointLight")
-	light.Brightness = 1.5
-	light.Range = 30
+	light.Brightness = 2
+	light.Range = 32
 	light.Parent = fixture
+end
+
+local function buildHallwayWalls(parent: Instance)
+	-- West hallway wall (x = -7) with 3 doorways into west rooms
+	wallZ(parent, "HallWest1", MAP.HallMinX, MAP.HallMinZ, -4)
+	wallZ(parent, "HallWest2", MAP.HallMinX, 4, 22)
+	wallZ(parent, "HallWest3", MAP.HallMinX, 30, 56)
+	wallZ(parent, "HallWest4", MAP.HallMinX, 64, MAP.HallMaxZ)
+
+	-- East hallway wall (x = 7) with 1 doorway into cafeteria
+	wallZ(parent, "HallEast1", MAP.HallMaxX, MAP.HallMinZ, 6)
+	wallZ(parent, "HallEast2", MAP.HallMaxX, 18, MAP.HallMaxZ)
+end
+
+local function buildStructure(parent: Instance)
+	-- One continuous floor for the whole building
+	fillFloor(parent, MAP.MinX, MAP.MaxX, MAP.MinZ, MAP.MaxZ)
+	fillCeiling(parent, MAP.MinX, MAP.MaxX, MAP.MinZ, MAP.MaxZ)
+
+	-- Outer walls
+	wallX(parent, "OuterSouth", MAP.MinZ, MAP.MinX, MAP.MaxX)
+	wallX(parent, "OuterNorth", MAP.MaxZ, MAP.MinX, MAP.MaxX)
+	wallZ(parent, "OuterWest", MAP.MinX, MAP.MinZ, MAP.MaxZ)
+	wallZ(parent, "OuterEast", MAP.MaxX, MAP.MinZ, MAP.MaxZ)
+
+	-- Lobby north wall — doorway into hallway (8 studs wide, centered)
+	wallXWithGap(parent, "LobbyNorth", MAP.LobbyMaxZ, MAP.LobbyMinX, MAP.LobbyMaxX, -4, 4)
+
+	buildHallwayWalls(parent)
+
+	-- Locked door divider between front hallway and back hall
+	wallXWithGap(parent, "HallDivider", 50, MAP.HallMinX, MAP.HallMaxX, -4, 4)
+
+	-- West side rooms — outer walls
+	wallZ(parent, "OfficeWest", MAP.MinX + 1, MAP.OfficeMinZ, MAP.OfficeMaxZ)
+	wallX(parent, "OfficeSouth", MAP.OfficeMinZ, MAP.MinX, MAP.WestRoomMaxX)
+	wallX(parent, "OfficeNorth", MAP.OfficeMaxZ, MAP.MinX, MAP.WestRoomMaxX)
+
+	wallZ(parent, "StorageWest", MAP.MinX + 1, MAP.StorageMinZ, MAP.StorageMaxZ)
+	wallX(parent, "StorageSouth", MAP.StorageMinZ, MAP.MinX, MAP.WestRoomMaxX)
+	wallX(parent, "StorageNorth", MAP.StorageMaxZ, MAP.MinX, MAP.WestRoomMaxX)
+
+	wallZ(parent, "GeneratorWest", MAP.MinX + 1, MAP.GeneratorMinZ, MAP.GeneratorMaxZ)
+	wallX(parent, "GeneratorSouth", MAP.GeneratorMinZ, MAP.MinX, MAP.WestRoomMaxX)
+	wallX(parent, "GeneratorNorth", MAP.GeneratorMaxZ, MAP.MinX, MAP.WestRoomMaxX)
+
+	-- West room east walls — segments between hallway doorways
+	wallZ(parent, "OfficeEastTop", MAP.WestRoomMaxX, MAP.OfficeMinZ, -4)
+	wallZ(parent, "OfficeEastBottom", MAP.WestRoomMaxX, 4, MAP.OfficeMaxZ)
+
+	wallZ(parent, "StorageEastTop", MAP.WestRoomMaxX, MAP.StorageMinZ, 22)
+	wallZ(parent, "StorageEastBottom", MAP.WestRoomMaxX, 30, MAP.StorageMaxZ)
+
+	wallZ(parent, "GeneratorEastTop", MAP.WestRoomMaxX, MAP.GeneratorMinZ, 56)
+	wallZ(parent, "GeneratorEastBottom", MAP.WestRoomMaxX, 64, MAP.GeneratorMaxZ)
+
+	-- Cafeteria walls
+	wallZ(parent, "CafeteriaEast", MAP.CafeteriaMaxX, MAP.CafeteriaMinZ, MAP.CafeteriaMaxZ)
+	wallX(parent, "CafeteriaSouth", MAP.CafeteriaMinZ, MAP.CafeteriaMinX, MAP.CafeteriaMaxX)
+	wallX(parent, "CafeteriaNorth", MAP.CafeteriaMaxZ, MAP.CafeteriaMinX, MAP.CafeteriaMaxX)
+	wallZ(parent, "CafeteriaWestTop", MAP.CafeteriaMinX, MAP.CafeteriaMinZ, 6)
+	wallZ(parent, "CafeteriaWestBottom", MAP.CafeteriaMinX, 18, MAP.CafeteriaMaxZ)
+
+	-- Back hall end cap (north end of hallway)
+	wallX(parent, "BackHallNorth", MAP.MaxZ - 1, MAP.HallMinX, MAP.HallMaxX)
 end
 
 local function clearExistingMap(mapFolder: Folder)
@@ -362,13 +391,13 @@ function MapBuilder.build()
 	end
 
 	Lighting.ClockTime = 0
-	Lighting.Brightness = 1.2
-	Lighting.Ambient = Color3.fromRGB(30, 30, 40)
-	Lighting.OutdoorAmbient = Color3.fromRGB(20, 20, 30)
+	Lighting.Brightness = 1.3
+	Lighting.Ambient = Color3.fromRGB(35, 35, 45)
+	Lighting.OutdoorAmbient = Color3.fromRGB(20, 20, 28)
 
-	local rooms = Instance.new("Folder")
-	rooms.Name = "Rooms"
-	rooms.Parent = workspaceMap
+	local structure = Instance.new("Folder")
+	structure.Name = "Structure"
+	structure.Parent = workspaceMap
 
 	local objectives = Instance.new("Folder")
 	objectives.Name = "Objectives"
@@ -382,62 +411,51 @@ function MapBuilder.build()
 	doors.Name = "Doors"
 	doors.Parent = workspaceMap
 
-	local roomY = WALL_HEIGHT / 2
+	local labels = Instance.new("Folder")
+	labels.Name = "Labels"
+	labels.Parent = workspaceMap
 
-	-- Lobby (south) opens north into hallway
-	createRoom(rooms, "Lobby", Vector3.new(0, roomY, -50), Vector3.new(50, WALL_HEIGHT, 36), { North = 10 })
-	-- Main hallway runs north-south
-	createRoom(rooms, "Hallway", Vector3.new(0, roomY, 10), Vector3.new(12, WALL_HEIGHT, 70), { South = 10 })
-	-- Side rooms open toward hallway
-	createRoom(rooms, "Office", Vector3.new(-28, roomY, 0), Vector3.new(22, WALL_HEIGHT, 22), { East = 8 })
-	createRoom(rooms, "Storage", Vector3.new(-28, roomY, 35), Vector3.new(22, WALL_HEIGHT, 22), { East = 8 })
-	createRoom(rooms, "Cafeteria", Vector3.new(28, roomY, 5), Vector3.new(24, WALL_HEIGHT, 28), { West = 8 })
-	createRoom(rooms, "GeneratorRoom", Vector3.new(-28, roomY, 68), Vector3.new(22, WALL_HEIGHT, 22), { East = 8 })
-	createRoom(rooms, "BackHall", Vector3.new(0, roomY, 62), Vector3.new(12, WALL_HEIGHT, 30), { South = 10 })
+	buildStructure(structure)
 
-	-- Spawns
-	local spawnY = 1
-	createSpawn(spawns, Vector3.new(-10, spawnY, -55), 1)
-	createSpawn(spawns, Vector3.new(10, spawnY, -55), 2)
-	createSpawn(spawns, Vector3.new(-10, spawnY, -45), 3)
-	createSpawn(spawns, Vector3.new(10, spawnY, -45), 4)
-	createSpawn(spawns, Vector3.new(0, spawnY, -50), 5)
-	createSpawn(spawns, Vector3.new(-5, spawnY, -52), 6)
-	createSpawn(spawns, Vector3.new(5, spawnY, -48), 7)
-	createSpawn(spawns, Vector3.new(0, spawnY, -58), 8)
+	-- Spawns in lobby
+	createSpawn(spawns, Vector3.new(-12, 1, -52), 1)
+	createSpawn(spawns, Vector3.new(12, 1, -52), 2)
+	createSpawn(spawns, Vector3.new(-12, 1, -42), 3)
+	createSpawn(spawns, Vector3.new(12, 1, -42), 4)
+	createSpawn(spawns, Vector3.new(0, 1, -48), 5)
+	createSpawn(spawns, Vector3.new(-6, 1, -56), 6)
+	createSpawn(spawns, Vector3.new(6, 1, -44), 7)
+	createSpawn(spawns, Vector3.new(0, 1, -58), 8)
 
-	-- Objectives (spread across map for Phase 3)
-	createFuelCell(objectives, "FuelCell1", Vector3.new(-28, 2, 38)) -- Storage
-	createFuelCell(objectives, "FuelCell2", Vector3.new(28, 2, 8)) -- Cafeteria
-	createFuelCell(objectives, "FuelCell3", Vector3.new(0, 2, 72)) -- Back hall
-	createKey(objectives, Vector3.new(-28, 5, 0)) -- Office desk
-	createGenerator(objectives, Vector3.new(-28, 3.5, 68)) -- Generator room
+	-- Objectives inside their rooms
+	createFuelCell(objectives, "FuelCell1", Vector3.new(-24, 2, 31)) -- Storage
+	createFuelCell(objectives, "FuelCell2", Vector3.new(24, 2, 12)) -- Cafeteria
+	createFuelCell(objectives, "FuelCell3", Vector3.new(0, 2, 68)) -- Back hall
+	createKey(objectives, Vector3.new(-24, 5, 0)) -- Office
+	createGenerator(objectives, Vector3.new(-24, 3.5, 63)) -- Generator room
 
-	-- Locked door blocking back hall
-	createDoorway(doors, "MainDoor", CFrame.new(0, 5, 48), Vector3.new(10, 10, 1))
+	-- Locked door in hallway (blocks path to back hall — walk around isn't possible, must open)
+	createDoor(doors, "MainDoor", Vector3.new(0, 5, 50), Vector3.new(14, 10, 1))
 
-	-- Signs
-	createLabel(rooms, "LOBBY", Vector3.new(0, 8, -66))
-	createLabel(rooms, "OFFICE", Vector3.new(-38, 8, 0))
-	createLabel(rooms, "STORAGE", Vector3.new(-38, 8, 35))
-	createLabel(rooms, "CAFETERIA", Vector3.new(38, 8, 5))
-	createLabel(rooms, "GENERATOR", Vector3.new(-38, 8, 68))
-	createLabel(rooms, "BACK HALL", Vector3.new(0, 8, 78))
+	-- Room labels
+	createSign(labels, "LOBBY", Vector3.new(0, 10, -50))
+	createSign(labels, "HALLWAY", Vector3.new(0, 10, 10))
+	createSign(labels, "OFFICE", Vector3.new(-24, 10, 0))
+	createSign(labels, "STORAGE", Vector3.new(-24, 10, 31))
+	createSign(labels, "CAFETERIA", Vector3.new(24, 10, 12))
+	createSign(labels, "GENERATOR", Vector3.new(-24, 10, 63))
+	createSign(labels, "BACK HALL", Vector3.new(0, 10, 68))
 
-	-- Lights
-	for _, pos in {
-		Vector3.new(0, 12, -50),
-		Vector3.new(0, 12, 10),
-		Vector3.new(-28, 12, 0),
-		Vector3.new(-28, 12, 35),
-		Vector3.new(28, 12, 5),
-		Vector3.new(-28, 12, 68),
-		Vector3.new(0, 12, 62),
-	} do
-		createLight(rooms, pos)
-	end
+	-- Lights in each area
+	createLight(structure, Vector3.new(0, 13, -48))
+	createLight(structure, Vector3.new(0, 13, 10))
+	createLight(structure, Vector3.new(-24, 13, 0))
+	createLight(structure, Vector3.new(-24, 13, 31))
+	createLight(structure, Vector3.new(24, 13, 12))
+	createLight(structure, Vector3.new(-24, 13, 63))
+	createLight(structure, Vector3.new(0, 13, 68))
 
-	print("[newmm] MapBuilder — facility map generated.")
+	print("[newmm] MapBuilder — connected facility map generated.")
 	return workspaceMap
 end
 
