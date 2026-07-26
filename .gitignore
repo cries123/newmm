@@ -1,0 +1,16 @@
+# Rojo
+/*.rbxl
+/*.rbxlx
+/*.rbxm
+/*.rbxmx
+/sourcemap.json
+
+# Tooling
+/.aftman/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
