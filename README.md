@@ -117,7 +117,8 @@ newmm/
 ├── src/
 │   ├── server/
 │   │   ├── GameManager.server.lua    # Server entry point
-│   │   └── CombatService.lua         # Combat logic (kill, shoot, arrest)
+│   │   ├── CombatService.lua         # Combat logic (kill, shoot, arrest)
+│   │   └── MapBuilder.lua            # Auto-generates the facility map
 │   ├── client/
 │   │   ├── ClientUI.client.lua       # Timer + role UI
 │   │   ├── CombatClient.client.lua   # Ability buttons + keybinds
@@ -150,6 +151,28 @@ newmm/
 
 ---
 
+## Map (auto-generated)
+
+The map is **built automatically** when you press Play — no manual building required.
+
+`MapBuilder.lua` creates a full test facility under `Workspace.Map`:
+
+| Area | What's there |
+|------|----------------|
+| **Lobby** | 8 spawn points |
+| **Office** | Key on desk |
+| **Storage** | FuelCell1 |
+| **Cafeteria** | FuelCell2 |
+| **Generator Room** | Generator (Phase 3 hooks here) |
+| **Back Hall** | FuelCell3, blocked by MainDoor |
+| **Hallway** | Connects everything together |
+
+Objectives are tagged with **CollectionService** (`FuelCell`, `Generator`, `Key`, `Door`, `Spawn`) so Phase 3 scripts can find them.
+
+To customize the layout later, edit `src/server/MapBuilder.lua`.
+
+---
+
 ## Building a .rbxl place file (optional)
 
 To export a standalone place file without live sync:
@@ -159,20 +182,6 @@ rojo build -o newmm.rbxl
 ```
 
 Open `newmm.rbxl` in Studio. Re-run after code changes.
-
----
-
-## Map setup (do this in Studio)
-
-Rojo syncs **scripts only**. Build your map directly in Studio under `Workspace.Map`:
-
-- Spawn locations for innocents / murderers / sheriff
-- Generator room (Phase 3)
-- Locked doors (Phase 3)
-- Escape zone (Phase 4)
-- Lockers / hiding spots (Phase 5)
-
-Keep map geometry in Studio; keep game logic in this repo.
 
 ---
 
