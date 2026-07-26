@@ -28,11 +28,20 @@ local function isPlaying(): boolean
 	return RoundManager.getState() == "Playing"
 end
 
-local function canDoObjectives(player: Player): boolean
-	return isPlaying()
-		and PlayerUtils.isAlive(player)
-		and not PlayerUtils.isStunned(player)
-		and RoleManager.getRole(player) ~= "Murderer"
+local function canDoObjectives(player: Player): (boolean, string?)
+	if not isPlaying() then
+		return false, "Wait for the round to start."
+	end
+	if not PlayerUtils.isAlive(player) then
+		return false, "You are eliminated."
+	end
+	if PlayerUtils.isStunned(player) then
+		return false, "You are stunned."
+	end
+	if RoleManager.getRole(player) == "Murderer" then
+		return false, "Murderers cannot do objectives."
+	end
+	return true, nil
 end
 
 local function getGenerator(): BasePart?
@@ -44,13 +53,51 @@ local function getGenerator(): BasePart?
 	return nil
 end
 
-local function broadcastPowerState()
-	Remotes.get("PowerStateUpdated"):FireAllClients({
+local function notifyPlayer(player: Player)
+	local carrying = player:GetAttribute(GameConfig.CarryingFuelAttribute) == true
+	local hasKey = player:GetAttribute(GameConfig.HasKeyAttribute) == true
+
+	Remotes.get("PlayerObjectivesUpdated"):FireClient(player, {
+		carryingFuel = carrying,
+		hasKey = hasKey,
+	})
+
+	Remotes.get("PowerStateUpdated"):FireClient(player, {
 		cellsDeposited = cellsDeposited,
 		cellsRequired = GameConfig.FuelCellsRequired,
 		powerOn = powerOn,
 		sabotageUsesLeft = sabotageUsesLeft,
+		carryingFuel = carrying,
+		hasKey = hasKey,
 	})
+end
+
+local function broadcastPowerState()
+	for _, player in Players:GetPlayers() do
+		notifyPlayer(player)
+	end
+end
+
+local function setPromptsEnabled(enabled: boolean)
+	for _, inst in CollectionService:GetTagged("FuelCell") do
+		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+		if prompt and inst:IsA("BasePart") and inst:GetAttribute("Collected") ~= true then
+			prompt.Enabled = enabled
+		end
+	end
+	for _, inst in CollectionService:GetTagged("Key") do
+		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+		if prompt and inst:IsA("BasePart") and inst:GetAttribute("Collected") ~= true then
+			prompt.Enabled = enabled
+		end
+	end
+	for _, inst in CollectionService:GetTagged("Door") do
+		local prompt = inst:FindFirstChildOfClass("ProximityPrompt")
+		if prompt and inst:IsA("BasePart") and inst:GetAttribute("Locked") == true then
+			prompt.Enabled = enabled
+		end
+	end
+	updateGeneratorPrompts()
 end
 
 local function setPowerVisuals(on: boolean)
@@ -159,17 +206,21 @@ local function updateGeneratorPrompts()
 
 	if depositPrompt then
 		depositPrompt.Enabled = isPlaying() and not powerOn
+		depositPrompt.UIOffset = Vector2.new(0, 0)
 	end
 	if bootPrompt then
 		bootPrompt.Enabled = isPlaying()
 			and not powerOn
 			and cellsDeposited >= GameConfig.FuelCellsRequired
+		bootPrompt.UIOffset = Vector2.new(0, -40)
 	end
 	if sabotagePrompt then
 		sabotagePrompt.Enabled = isPlaying() and powerOn and sabotageUsesLeft > 0
+		sabotagePrompt.UIOffset = Vector2.new(0, 40)
 	end
 	if maintainPrompt then
 		maintainPrompt.Enabled = isPlaying() and powerOn
+		maintainPrompt.UIOffset = Vector2.new(0, -80)
 	end
 end
 
@@ -193,16 +244,23 @@ function PowerService.turnOffPower(reason: string)
 end
 
 local function onPickupFuelCell(player: Player, cell: BasePart)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
+		if reason then
+			Remotes.get("PowerAlert"):FireClient(player, reason)
+		end
 		return
 	end
 	if cell:GetAttribute("Collected") == true then
+		Remotes.get("PowerAlert"):FireClient(player, "That fuel cell is already taken.")
 		return
 	end
 	if player:GetAttribute(GameConfig.CarryingFuelAttribute) == true then
+		Remotes.get("PowerAlert"):FireClient(player, "You are already carrying a fuel cell.")
 		return
 	end
 
+	player:SetAttribute(GameConfig.CarryingFuelAttribute, true)
 	cell:SetAttribute("Collected", true)
 	cell.Transparency = 1
 	cell.CanCollide = false
@@ -211,15 +269,20 @@ local function onPickupFuelCell(player: Player, cell: BasePart)
 		prompt.Enabled = false
 	end
 
-	player:SetAttribute(GameConfig.CarryingFuelAttribute, true)
-	broadcastPowerState()
+	notifyPlayer(player)
+	Remotes.get("PowerAlert"):FireClient(player, "Picked up fuel cell. Bring it to the generator.")
 end
 
 local function onDepositFuelCell(player: Player)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
+		if reason then
+			Remotes.get("PowerAlert"):FireClient(player, reason)
+		end
 		return
 	end
 	if player:GetAttribute(GameConfig.CarryingFuelAttribute) ~= true then
+		Remotes.get("PowerAlert"):FireClient(player, "You are not carrying a fuel cell.")
 		return
 	end
 	if cellsDeposited >= GameConfig.FuelCellsRequired then
@@ -238,12 +301,16 @@ local function onDepositFuelCell(player: Player)
 	broadcastPowerState()
 
 	if cellsDeposited >= GameConfig.FuelCellsRequired then
-		Remotes.get("PowerAlert"):FireAllClients("All fuel cells deposited! Boot the generator.")
+		Remotes.get("PowerAlert"):FireClient(player, "All fuel deposited! Hold Boot Generator.")
 	end
 end
 
 local function onBootGenerator(player: Player)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
+		if reason then
+			Remotes.get("PowerAlert"):FireClient(player, reason)
+		end
 		return
 	end
 	if cellsDeposited < GameConfig.FuelCellsRequired then
@@ -257,7 +324,8 @@ local function onBootGenerator(player: Player)
 end
 
 local function onMaintainPower(player: Player)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
 		return
 	end
 	if not powerOn then
@@ -284,16 +352,23 @@ local function onSabotage(player: Player)
 end
 
 local function onPickupKey(player: Player, key: BasePart)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
+		if reason then
+			Remotes.get("PowerAlert"):FireClient(player, reason)
+		end
 		return
 	end
 	if key:GetAttribute("Collected") == true then
+		Remotes.get("PowerAlert"):FireClient(player, "The key is already taken.")
 		return
 	end
 	if player:GetAttribute(GameConfig.HasKeyAttribute) == true then
+		Remotes.get("PowerAlert"):FireClient(player, "You already have the key.")
 		return
 	end
 
+	player:SetAttribute(GameConfig.HasKeyAttribute, true)
 	key:SetAttribute("Collected", true)
 	key.Transparency = 1
 	key.CanCollide = false
@@ -302,29 +377,33 @@ local function onPickupKey(player: Player, key: BasePart)
 		prompt.Enabled = false
 	end
 
-	player:SetAttribute(GameConfig.HasKeyAttribute, true)
-	broadcastPowerState()
+	notifyPlayer(player)
 	Remotes.get("PowerAlert"):FireClient(player, "You picked up the office key.")
 end
 
 local function onTryOpenDoor(player: Player, door: BasePart)
-	if not canDoObjectives(player) then
+	local ok, reason = canDoObjectives(player)
+	if not ok then
+		if reason then
+			Remotes.get("PowerAlert"):FireClient(player, reason)
+		end
 		return
 	end
 	if door:GetAttribute("Locked") ~= true then
 		return
 	end
 	if not powerOn then
-		Remotes.get("PowerAlert"):FireClient(player, "The door needs power.")
+		Remotes.get("PowerAlert"):FireClient(player, "Power is off. Boot the generator first.")
 		return
 	end
-	if door:GetAttribute("RequiresKey") == true and player:GetAttribute(GameConfig.HasKeyAttribute) ~= true then
+	local needsKey = door:GetAttribute("RequiresKey")
+	if needsKey ~= false and player:GetAttribute(GameConfig.HasKeyAttribute) ~= true then
 		Remotes.get("PowerAlert"):FireClient(player, "You need the office key.")
 		return
 	end
 
 	unlockDoor(door)
-	Remotes.get("PowerAlert"):FireAllClients(`{player.Name} unlocked a door!`)
+	Remotes.get("PowerAlert"):FireAllClients(`{player.Name} unlocked the door!`)
 end
 
 local function connectNamedPrompt(parent: Instance, promptName: string, handler: (Player) -> ())
@@ -348,6 +427,7 @@ local function setupGenerator(generator: BasePart)
 	deposit.ObjectText = "Generator"
 	deposit.HoldDuration = 0
 	deposit.MaxActivationDistance = 10
+	deposit.RequiresLineOfSight = false
 	deposit.Parent = generator
 	connectNamedPrompt(generator, "DepositPrompt", onDepositFuelCell)
 
@@ -357,6 +437,7 @@ local function setupGenerator(generator: BasePart)
 	boot.ObjectText = "Generator"
 	boot.HoldDuration = GameConfig.GeneratorBootDuration
 	boot.MaxActivationDistance = 10
+	boot.RequiresLineOfSight = false
 	boot.Enabled = false
 	boot.Parent = generator
 	connectNamedPrompt(generator, "BootPrompt", onBootGenerator)
@@ -367,6 +448,7 @@ local function setupGenerator(generator: BasePart)
 	maintain.ObjectText = "Generator"
 	maintain.HoldDuration = 3
 	maintain.MaxActivationDistance = 10
+	maintain.RequiresLineOfSight = false
 	maintain.Enabled = false
 	maintain.Parent = generator
 	connectNamedPrompt(generator, "MaintainPrompt", onMaintainPower)
@@ -377,6 +459,7 @@ local function setupGenerator(generator: BasePart)
 	sabotage.ObjectText = "Generator"
 	sabotage.HoldDuration = 4
 	sabotage.MaxActivationDistance = 10
+	sabotage.RequiresLineOfSight = false
 	sabotage.Enabled = false
 	sabotage.Parent = generator
 	connectNamedPrompt(generator, "SabotagePrompt", onSabotage)
@@ -395,7 +478,9 @@ local function hookFuelCell(inst: BasePart)
 		prompt.ActionText = "Take Fuel Cell"
 		prompt.ObjectText = "Fuel Cell"
 		prompt.HoldDuration = 0
-		prompt.MaxActivationDistance = 10
+		prompt.MaxActivationDistance = 12
+		prompt.RequiresLineOfSight = false
+		prompt.Enabled = false
 		prompt.Parent = inst
 	end
 	connectNamedPrompt(inst, prompt.Name, function(player: Player)
@@ -416,7 +501,8 @@ local function hookDoor(inst: BasePart)
 		prompt.ActionText = "Unlock Door"
 		prompt.ObjectText = "Locked Door"
 		prompt.HoldDuration = 1
-		prompt.MaxActivationDistance = 10
+		prompt.RequiresLineOfSight = false
+		prompt.MaxActivationDistance = 12
 		prompt.Parent = inst
 	end
 	connectNamedPrompt(inst, prompt.Name, function(player: Player)
@@ -491,6 +577,7 @@ function PowerService.resetForRound()
 
 	updateGeneratorPrompts()
 	broadcastPowerState()
+	setPromptsEnabled(true)
 end
 
 function PowerService.init()
@@ -515,9 +602,10 @@ function PowerService.init()
 	RoundManager.onStateChanged(function(state: GameConfig.RoundState)
 		if state == "Playing" then
 			PowerService.resetForRound()
-		elseif state == "Ended" or state == "Intermission" then
+		elseif state == "Ended" or state == "Intermission" or state == "RoleReveal" then
 			stopDecayLoop()
 			setPowerVisuals(false)
+			setPromptsEnabled(false)
 		end
 	end)
 

@@ -378,18 +378,41 @@ local function watchPlayerTools(player: Player)
 	end)
 end
 
+local function tryGiveSheriffGun(player: Player)
+	if RoleManager.getRole(player) ~= "Sheriff" then
+		return
+	end
+	if not isRoundActive() or not PlayerUtils.isAlive(player) then
+		return
+	end
+
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		local waited = player:WaitForChild("Backpack", 8)
+		if waited and waited:IsA("Backpack") then
+			backpack = waited
+		end
+	end
+	if not backpack then
+		return
+	end
+
+	if player:GetAttribute(GameConfig.HasGunAttribute) == true then
+		local existing = backpack:FindFirstChild(GameConfig.RevolverToolName)
+		if existing then
+			return
+		end
+	end
+
+	giveRevolver(player)
+end
+
 local function spawnPlayer(player: Player)
 	player.CharacterAutoLoads = true
 	player:LoadCharacter()
-
-	local role = RoleManager.getRole(player)
-	if role == "Sheriff" then
-		task.defer(function()
-			if PlayerUtils.isAlive(player) and RoundManager.getState() == "Playing" then
-				giveRevolver(player)
-			end
-		end)
-	end
+	task.delay(1, function()
+		tryGiveSheriffGun(player)
+	end)
 end
 
 function CombatService.resetForRound()
@@ -461,8 +484,11 @@ function CombatService.init()
 						end
 					end
 				end)
-			elseif PlayerUtils.isAlive(player) then
+			elseif PlayerUtils.isAlive(player) and RoundManager.getState() == "Playing" then
 				setMovementLocked(player, PlayerUtils.isStunned(player))
+				task.delay(0.5, function()
+					tryGiveSheriffGun(player)
+				end)
 			end
 		end)
 	end)

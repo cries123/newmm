@@ -66,7 +66,7 @@ local assassinateButton = createActionButton(
 	Color3.fromRGB(170, 40, 40),
 	36
 )
-local shootButton = createActionButton("Shoot", "Shoot [E]", Color3.fromRGB(200, 160, 40), 36)
+local shootButton = createActionButton("Shoot", "Shoot [F]", Color3.fromRGB(200, 160, 40), 36)
 local arrestButton = createActionButton("Arrest", "Arrest [R]", Color3.fromRGB(60, 100, 200), 80)
 
 local function updateVisibility()
@@ -80,7 +80,7 @@ local function updateVisibility()
 	if currentRole == "Murderer" then
 		infoLabel.Text = if cooldownRemaining > 0
 			then `Cooldown: {math.ceil(cooldownRemaining)}s`
-			else "Ready to assassinate"
+			else "Assassinate [Q] | Sabotage at generator"
 	elseif hasGun then
 		infoLabel.Text = `Ammo: {ammo}`
 	elseif currentRole == "Sheriff" then
@@ -118,7 +118,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 
 	if input.KeyCode == Enum.KeyCode.Q and currentRole == "Murderer" and cooldownRemaining <= 0 then
 		Remotes.get("Assassinate"):FireServer()
-	elseif input.KeyCode == Enum.KeyCode.E and hasGun and ammo > 0 then
+	elseif input.KeyCode == Enum.KeyCode.F and hasGun and ammo > 0 then
 		Remotes.get("Shoot"):FireServer()
 	elseif input.KeyCode == Enum.KeyCode.R and currentRole == "Sheriff" then
 		Remotes.get("Arrest"):FireServer()
