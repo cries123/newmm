@@ -39,6 +39,14 @@ function Remotes.init()
 	getOrCreateRemote("RoleAssigned", "RemoteEvent")
 	getOrCreateRemote("TimerUpdated", "RemoteEvent")
 	getOrCreateRemote("RoundEnded", "RemoteEvent")
+
+	-- Phase 2: combat
+	getOrCreateRemote("Assassinate", "RemoteEvent")
+	getOrCreateRemote("Shoot", "RemoteEvent")
+	getOrCreateRemote("Arrest", "RemoteEvent")
+	getOrCreateRemote("PlayerDied", "RemoteEvent")
+	getOrCreateRemote("CombatStateUpdated", "RemoteEvent")
+	getOrCreateRemote("PlayerStunned", "RemoteEvent")
 end
 
 function Remotes.get(name: string): RemoteEvent
