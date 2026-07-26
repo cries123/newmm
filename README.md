@@ -4,15 +4,26 @@ An objective-based escape horror game for Roblox (Murder Mystery–inspired, not
 
 Code is written in this repo with [Rojo](https://rojo.space/) and synced into Roblox Studio.
 
-## What’s included (Phase 1)
+## What's included
 
+### Phase 1
 - **Lobby / intermission** — waits for minimum players, then starts a countdown
 - **Role assignment** — Sheriff, Murderers (1–2 based on lobby size), Innocents
 - **Round loop** — role reveal → 6-minute round → win screen → repeat
-- **Basic win conditions** — all good guys dead = Murderers win; all murderers dead or time runs out with survivors = Innocents win
 - **Client UI** — timer, role reveal, end-of-round message
 
-Phases 2–4 (combat, power/doors, escape) are planned next.
+### Phase 2 — Combat
+- **Murderer — Assassinate** — hidden kill ability with cooldown (`Q` or button)
+- **Sheriff — Revolver** — limited ammo; shoot murderers to eliminate them (`E` or button)
+- **Sheriff — Arrest** — stun a player for 5 seconds instead of shooting (`R` or button)
+- **Friendly fire** — sheriff can accidentally shoot innocents
+- **Gun drop** — if the sheriff dies, the revolver drops for any innocent to pick up
+- **Death / spectator** — eliminated players spectate until the next round (arrow keys to switch)
+- **Instant win** — innocents win immediately when all murderers are eliminated
+
+### Coming next
+- **Phase 3** — power system, fuel cells, doors
+- **Phase 4** — escape zone and full win conditions
 
 ---
 
@@ -105,24 +116,37 @@ newmm/
 ├── aftman.toml            # Pins Rojo version
 ├── src/
 │   ├── server/
-│   │   └── GameManager.server.lua    # Server entry point
+│   │   ├── GameManager.server.lua    # Server entry point
+│   │   └── CombatService.lua         # Combat logic (kill, shoot, arrest)
 │   ├── client/
-│   │   └── ClientUI.client.lua       # Timer + role UI
+│   │   ├── ClientUI.client.lua       # Timer + role UI
+│   │   ├── CombatClient.client.lua   # Ability buttons + keybinds
+│   │   └── SpectatorClient.client.lua
 │   └── shared/
 │       ├── GameConfig.lua              # Tunable constants
 │       ├── Remotes.lua                 # RemoteEvent setup
 │       ├── RoleManager.lua             # Role assignment
-│       └── RoundManager.lua            # Round state machine
+│       ├── RoundManager.lua            # Round state machine
+│       └── PlayerUtils.lua             # Alive/stun helpers
 ```
 
 ---
 
-## Testing Phase 1
+## Testing
 
 1. Run `rojo serve` and connect Studio
 2. In Studio: **Test → Start** (or F5)
 3. For multiplayer testing: **Test → Clients and Servers** → add 2–3 players
 4. You need **4+ players** (or fake clients) for rounds to start — edit `MinPlayers` in `GameConfig.lua` to `1` for solo testing
+
+### Phase 2 controls
+
+| Role | Action | Key |
+|------|--------|-----|
+| Murderer | Assassinate (melee, in front of you) | `Q` |
+| Sheriff / gun holder | Shoot | `E` |
+| Sheriff only | Arrest (5s stun) | `R` |
+| Dead player | Cycle spectate target | `←` / `→` |
 
 ---
 
@@ -162,15 +186,17 @@ Edit `src/shared/GameConfig.lua`:
 | `IntermissionDuration` | 20 | Lobby countdown (seconds) |
 | `RoundDuration` | 360 | Round length (6 min) |
 | `MurdererCount` | 2 | Murderers when 8+ players |
+| `SheriffAmmo` | 5 | Shots per round |
+| `AssassinateCooldown` | 10 | Seconds between kills |
+| `ArrestStunDuration` | 5 | Arrest stun length (seconds) |
 
 ---
 
 ## Next steps
 
-1. **Phase 2** — Murderer assassinate, Sheriff gun, death/spectate
-2. **Phase 3** — Fuel cells, generator, power decay, doors
-3. **Phase 4** — Escape zone and full win table
-4. **Phase 5** — Hiding, perks, atmosphere
+1. **Phase 3** — Fuel cells, generator, power decay, locked doors
+2. **Phase 4** — Escape zone and full win table
+3. **Phase 5** — Hiding, perks, atmosphere
 
 ---
 

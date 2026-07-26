@@ -16,11 +16,14 @@ local GameConfig = {
 	MurdererCount = 2,
 	SheriffCount = 1,
 
-	-- Combat (Phase 2 — wired up later)
+	-- Combat (Phase 2)
 	SheriffAmmo = 5,
 	ArrestStunDuration = 5,
 	AssassinateCooldown = 10,
 	AssassinateRange = 8,
+	ShootRange = 120,
+	DefaultWalkSpeed = 16,
+	DefaultJumpPower = 50,
 
 	-- Power system (Phase 3 — wired up later)
 	FuelCellsRequired = 3,
@@ -34,6 +37,10 @@ local GameConfig = {
 	RoleAttribute = "Role",
 	IsAliveAttribute = "IsAlive",
 	EscapedAttribute = "Escaped",
+	HasGunAttribute = "HasGun",
+	StunnedAttribute = "Stunned",
+
+	RevolverToolName = "Revolver",
 }
 
 export type Role = "Innocent" | "Murderer" | "Sheriff"

@@ -22,6 +22,8 @@ local RoundManager = {}
 local currentState: RoundState = "Intermission"
 local timeRemaining = 0
 local running = false
+local stateChangedCallbacks: { (RoundState) -> () } = {}
+local pendingWinResult: WinResult? = nil
 
 local function setState(state: RoundState, timer: number?)
 	currentState = state
@@ -29,6 +31,10 @@ local function setState(state: RoundState, timer: number?)
 		timeRemaining = timer
 	end
 	Remotes.get("RoundStateChanged"):FireAllClients(state, timeRemaining)
+
+	for _, callback in stateChangedCallbacks do
+		task.spawn(callback, state)
+	end
 end
 
 local function broadcastTimer()
@@ -53,6 +59,17 @@ function RoundManager.getTimeRemaining(): number
 	return timeRemaining
 end
 
+function RoundManager.onStateChanged(callback: (RoundState) -> ())
+	table.insert(stateChangedCallbacks, callback)
+end
+
+function RoundManager.requestWinCheck()
+	local result = RoundManager.checkWinConditions()
+	if result then
+		pendingWinResult = result
+	end
+end
+
 function RoundManager.checkWinConditions(): WinResult?
 	local aliveGood = RoleManager.getAliveInnocentsAndSheriff()
 	local aliveMurderers = RoleManager.getAliveMurderers()
@@ -60,7 +77,7 @@ function RoundManager.checkWinConditions(): WinResult?
 	if #aliveMurderers == 0 and currentState == "Playing" then
 		return {
 			winner = "Innocents",
-			reason = "Both murderers were eliminated.",
+			reason = "All murderers were eliminated.",
 		}
 	end
 
@@ -137,7 +154,26 @@ function RoundManager.start()
 			local roundWinner: "Innocents" | "Murderers"? = nil
 
 			while timeRemaining > 0 and running do
-				task.wait(1)
+				if pendingWinResult then
+					roundWinner = pendingWinResult.winner
+					roundEndReason = pendingWinResult.reason
+					pendingWinResult = nil
+					break
+				end
+
+				local elapsed = 0
+				while elapsed < 1 and timeRemaining > 0 and running and not pendingWinResult do
+					task.wait(0.1)
+					elapsed += 0.1
+				end
+
+				if pendingWinResult then
+					roundWinner = pendingWinResult.winner
+					roundEndReason = pendingWinResult.reason
+					pendingWinResult = nil
+					break
+				end
+
 				timeRemaining -= 1
 				broadcastTimer()
 
