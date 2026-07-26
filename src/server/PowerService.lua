@@ -53,6 +53,17 @@ local function getGenerator(): BasePart?
 	return nil
 end
 
+local BOOT_RANGE = 14
+
+local function isPlayerNearGenerator(player: Player): boolean
+	local generator = getGenerator()
+	local _, _, root = PlayerUtils.getCharacterHumanoid(player)
+	if not generator or not root then
+		return false
+	end
+	return (root.Position - generator.Position).Magnitude <= BOOT_RANGE
+end
+
 local function notifyPlayer(player: Player)
 	local carrying = player:GetAttribute(GameConfig.CarryingFuelAttribute) == true
 	local hasKey = player:GetAttribute(GameConfig.HasKeyAttribute) == true
@@ -257,6 +268,10 @@ local function updateGeneratorPrompts()
 		sabotagePrompt.Enabled = playing and powerOn and sabotageUsesLeft > 0
 	end
 
+	generator:SetAttribute("BootReady", playing and not powerOn and fuelReady)
+	generator:SetAttribute("CellsDeposited", cellsDeposited)
+	generator:SetAttribute("PowerOn", powerOn)
+
 	updateGeneratorStatusLabel(generator)
 end
 
@@ -366,9 +381,14 @@ local function onBootGenerator(player: Player)
 		return
 	end
 	if cellsDeposited < GameConfig.FuelCellsRequired then
+		Remotes.get("PowerAlert"):FireClient(player, "Deposit all fuel cells first.")
 		return
 	end
 	if powerOn then
+		return
+	end
+	if not isPlayerNearGenerator(player) then
+		Remotes.get("PowerAlert"):FireClient(player, "Get closer to the generator.")
 		return
 	end
 
@@ -492,8 +512,9 @@ local function setupGenerator(generator: BasePart)
 	boot.ActionText = "Boot Generator"
 	boot.ObjectText = "READY — HOLD E!"
 	boot.HoldDuration = GameConfig.GeneratorBootDuration
-	boot.MaxActivationDistance = 12
+	boot.MaxActivationDistance = 14
 	boot.RequiresLineOfSight = false
+	boot.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
 	boot.KeyboardKeyCode = Enum.KeyCode.E
 	boot.GamepadKeyCode = Enum.KeyCode.ButtonX
 	boot.Enabled = false
