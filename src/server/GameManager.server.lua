@@ -8,10 +8,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local CombatService = require(script.Parent.CombatService)
+local MapBuilder = require(script.Parent.MapBuilder)
 local RoundManager = require(ReplicatedStorage.Shared.RoundManager)
 
 Remotes.init()
+MapBuilder.build()
 CombatService.init()
 RoundManager.start()
 
-print("[newmm] GameManager started — round loop and combat running.")
+print("[newmm] GameManager started — map, combat, and round loop running.")
