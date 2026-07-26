@@ -25,10 +25,11 @@ local GameConfig = {
 	DefaultWalkSpeed = 16,
 	DefaultJumpPower = 50,
 
-	-- Power system (Phase 3 — wired up later)
-	FuelCellsRequired = 3,
+	-- Power system (Phase 3)
+	FuelCellsRequired = 2,
 	GeneratorBootDuration = 10,
 	PowerDecayDuration = 120,
+	MurdererSabotageUses = 2,
 
 	-- Win conditions
 	EscapesRequiredForWin = 3,
@@ -39,6 +40,8 @@ local GameConfig = {
 	EscapedAttribute = "Escaped",
 	HasGunAttribute = "HasGun",
 	StunnedAttribute = "Stunned",
+	HasKeyAttribute = "HasKey",
+	CarryingFuelAttribute = "CarryingFuel",
 
 	RevolverToolName = "Revolver",
 }

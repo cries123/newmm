@@ -47,6 +47,10 @@ function Remotes.init()
 	getOrCreateRemote("PlayerDied", "RemoteEvent")
 	getOrCreateRemote("CombatStateUpdated", "RemoteEvent")
 	getOrCreateRemote("PlayerStunned", "RemoteEvent")
+
+	-- Phase 3: power & objectives
+	getOrCreateRemote("PowerStateUpdated", "RemoteEvent")
+	getOrCreateRemote("PowerAlert", "RemoteEvent")
 end
 
 function Remotes.get(name: string): RemoteEvent
