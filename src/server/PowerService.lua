@@ -193,35 +193,71 @@ local function resetKey()
 	end
 end
 
+local function updateGeneratorStatusLabel(generator: BasePart)
+	local gui = generator:FindFirstChild("StatusBillboard") :: BillboardGui?
+	if not gui then
+		gui = Instance.new("BillboardGui")
+		gui.Name = "StatusBillboard"
+		gui.Size = UDim2.fromOffset(200, 50)
+		gui.StudsOffset = Vector3.new(0, 5, 0)
+		gui.AlwaysOnTop = true
+		gui.Parent = generator
+
+		local label = Instance.new("TextLabel")
+		label.Name = "Label"
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 0.3
+		label.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBold
+		label.Parent = gui
+	end
+
+	local label = gui:FindFirstChild("Label") :: TextLabel
+	if powerOn then
+		label.Text = "POWER: ON"
+		label.TextColor3 = Color3.fromRGB(80, 255, 120)
+	elseif cellsDeposited >= GameConfig.FuelCellsRequired then
+		label.Text = "HOLD E TO BOOT!"
+		label.TextColor3 = Color3.fromRGB(255, 220, 80)
+	else
+		label.Text = `FUEL: {cellsDeposited}/{GameConfig.FuelCellsRequired}`
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
+end
+
 local function updateGeneratorPrompts()
 	local generator = getGenerator()
 	if not generator then
 		return
 	end
 
-	local bootPrompt = generator:FindFirstChild("BootPrompt") :: ProximityPrompt?
-	local depositPrompt = generator:FindFirstChild("DepositPrompt") :: ProximityPrompt?
+	local mainPrompt = generator:FindFirstChild("MainPrompt") :: ProximityPrompt?
 	local sabotagePrompt = generator:FindFirstChild("SabotagePrompt") :: ProximityPrompt?
-	local maintainPrompt = generator:FindFirstChild("MaintainPrompt") :: ProximityPrompt?
 
-	if depositPrompt then
-		depositPrompt.Enabled = isPlaying() and not powerOn
-		depositPrompt.UIOffset = Vector2.new(0, 0)
+	if mainPrompt then
+		if powerOn then
+			mainPrompt.ActionText = "Maintain Power"
+			mainPrompt.ObjectText = "Generator (ON)"
+			mainPrompt.HoldDuration = 2
+		elseif cellsDeposited >= GameConfig.FuelCellsRequired then
+			mainPrompt.ActionText = "Boot Generator"
+			mainPrompt.ObjectText = "READY — HOLD E!"
+			mainPrompt.HoldDuration = GameConfig.GeneratorBootDuration
+		else
+			mainPrompt.ActionText = "Deposit Fuel Cell"
+			mainPrompt.ObjectText = `Generator ({cellsDeposited}/{GameConfig.FuelCellsRequired})`
+			mainPrompt.HoldDuration = 0
+		end
+		mainPrompt.Enabled = isPlaying()
 	end
-	if bootPrompt then
-		bootPrompt.Enabled = isPlaying()
-			and not powerOn
-			and cellsDeposited >= GameConfig.FuelCellsRequired
-		bootPrompt.UIOffset = Vector2.new(0, -40)
-	end
+
 	if sabotagePrompt then
 		sabotagePrompt.Enabled = isPlaying() and powerOn and sabotageUsesLeft > 0
-		sabotagePrompt.UIOffset = Vector2.new(0, 40)
 	end
-	if maintainPrompt then
-		maintainPrompt.Enabled = isPlaying() and powerOn
-		maintainPrompt.UIOffset = Vector2.new(0, -80)
-	end
+
+	updateGeneratorStatusLabel(generator)
 end
 
 function PowerService.turnOnPower()
@@ -301,8 +337,34 @@ local function onDepositFuelCell(player: Player)
 	broadcastPowerState()
 
 	if cellsDeposited >= GameConfig.FuelCellsRequired then
-		Remotes.get("PowerAlert"):FireClient(player, "All fuel deposited! Hold Boot Generator.")
+		Remotes.get("PowerAlert"):FireClient(
+			player,
+			"All fuel deposited! Go to generator — HOLD E for 5 seconds on 'Boot Generator'."
+		)
 	end
+end
+
+local function onGeneratorInteract(player: Player)
+	if not isPlaying() then
+		return
+	end
+
+	if powerOn then
+		onMaintainPower(player)
+		return
+	end
+
+	if player:GetAttribute(GameConfig.CarryingFuelAttribute) == true then
+		onDepositFuelCell(player)
+		return
+	end
+
+	if cellsDeposited >= GameConfig.FuelCellsRequired then
+		onBootGenerator(player)
+		return
+	end
+
+	Remotes.get("PowerAlert"):FireClient(player, "Bring a fuel cell here first.")
 end
 
 local function onBootGenerator(player: Player)
@@ -421,48 +483,31 @@ end
 local function setupGenerator(generator: BasePart)
 	generator:SetAttribute("CellsDeposited", 0)
 
-	local deposit = Instance.new("ProximityPrompt")
-	deposit.Name = "DepositPrompt"
-	deposit.ActionText = "Deposit Fuel Cell"
-	deposit.ObjectText = "Generator"
-	deposit.HoldDuration = 0
-	deposit.MaxActivationDistance = 10
-	deposit.RequiresLineOfSight = false
-	deposit.Parent = generator
-	connectNamedPrompt(generator, "DepositPrompt", onDepositFuelCell)
-
-	local boot = Instance.new("ProximityPrompt")
-	boot.Name = "BootPrompt"
-	boot.ActionText = "Boot Generator"
-	boot.ObjectText = "Generator"
-	boot.HoldDuration = GameConfig.GeneratorBootDuration
-	boot.MaxActivationDistance = 10
-	boot.RequiresLineOfSight = false
-	boot.Enabled = false
-	boot.Parent = generator
-	connectNamedPrompt(generator, "BootPrompt", onBootGenerator)
-
-	local maintain = Instance.new("ProximityPrompt")
-	maintain.Name = "MaintainPrompt"
-	maintain.ActionText = "Maintain Power"
-	maintain.ObjectText = "Generator"
-	maintain.HoldDuration = 3
-	maintain.MaxActivationDistance = 10
-	maintain.RequiresLineOfSight = false
-	maintain.Enabled = false
-	maintain.Parent = generator
-	connectNamedPrompt(generator, "MaintainPrompt", onMaintainPower)
+	local main = Instance.new("ProximityPrompt")
+	main.Name = "MainPrompt"
+	main.ActionText = "Deposit Fuel Cell"
+	main.ObjectText = "Generator"
+	main.HoldDuration = 0
+	main.MaxActivationDistance = 12
+	main.RequiresLineOfSight = false
+	main.KeyboardKeyCode = Enum.KeyCode.E
+	main.GamepadKeyCode = Enum.KeyCode.ButtonX
+	main.Parent = generator
+	connectNamedPrompt(generator, "MainPrompt", onGeneratorInteract)
 
 	local sabotage = Instance.new("ProximityPrompt")
 	sabotage.Name = "SabotagePrompt"
 	sabotage.ActionText = "Sabotage"
 	sabotage.ObjectText = "Generator"
-	sabotage.HoldDuration = 4
-	sabotage.MaxActivationDistance = 10
+	sabotage.HoldDuration = 3
+	sabotage.MaxActivationDistance = 12
 	sabotage.RequiresLineOfSight = false
+	sabotage.UIOffset = Vector2.new(0, 50)
 	sabotage.Enabled = false
 	sabotage.Parent = generator
 	connectNamedPrompt(generator, "SabotagePrompt", onSabotage)
+
+	updateGeneratorStatusLabel(generator)
 end
 
 local function hookFuelCell(inst: BasePart)

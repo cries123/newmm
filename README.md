@@ -153,7 +153,7 @@ newmm/
 | Role | Action | Key |
 |------|--------|-----|
 | Murderer | Assassinate (melee, in front of you) | `Q` |
-| Sheriff / gun holder | Shoot | `E` |
+| Sheriff / gun holder | Shoot | `F` |
 | Sheriff only | Arrest (5s stun) | `R` |
 | Dead player | Cycle spectate target | `←` / `→` |
 

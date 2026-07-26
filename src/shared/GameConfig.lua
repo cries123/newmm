@@ -27,7 +27,7 @@ local GameConfig = {
 
 	-- Power system (Phase 3)
 	FuelCellsRequired = 2,
-	GeneratorBootDuration = 10,
+	GeneratorBootDuration = 5,
 	PowerDecayDuration = 120,
 	MurdererSabotageUses = 2,
 
