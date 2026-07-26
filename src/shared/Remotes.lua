@@ -51,6 +51,8 @@ function Remotes.init()
 	-- Phase 3: power & objectives
 	getOrCreateRemote("PowerStateUpdated", "RemoteEvent")
 	getOrCreateRemote("PowerAlert", "RemoteEvent")
+	getOrCreateRemote("PlayerObjectivesUpdated", "RemoteEvent")
+	getOrCreateRemote("RequestBootGenerator", "RemoteEvent")
 end
 
 function Remotes.get(name: string): RemoteEvent

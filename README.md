@@ -153,7 +153,7 @@ newmm/
 | Role | Action | Key |
 |------|--------|-----|
 | Murderer | Assassinate (melee, in front of you) | `Q` |
-| Sheriff / gun holder | Shoot | `E` |
+| Sheriff / gun holder | Shoot | `F` |
 | Sheriff only | Arrest (5s stun) | `R` |
 | Dead player | Cycle spectate target | `←` / `→` |
 
@@ -206,14 +206,25 @@ Edit `src/shared/GameConfig.lua`:
 | `SheriffAmmo` | 5 | Shots per round |
 | `AssassinateCooldown` | 10 | Seconds between kills |
 | `ArrestStunDuration` | 5 | Arrest stun length (seconds) |
+| `FuelCellsRequired` | 2 | Cells needed to boot generator |
+| `PowerDecayDuration` | 120 | Seconds before power dies |
+| `MurdererSabotageUses` | 2 | Sabotage uses per round |
+
+### Phase 3 objective flow
+
+1. Find **2 fuel cells** (Storage + Cafeteria zones)
+2. Bring each to **Generator** → Deposit
+3. Hold **Boot Generator** (10 seconds)
+4. Grab **key** in Office
+5. Walk to **Main Door** (north) → Unlock
+6. Murderers can **Sabotage** generator while power is on
 
 ---
 
 ## Next steps
 
-1. **Phase 3** — Fuel cells, generator, power decay, locked doors
-2. **Phase 4** — Escape zone and full win table
-3. **Phase 5** — Hiding, perks, atmosphere
+1. **Phase 4** — Escape zone (innocents win by escaping)
+2. **Phase 5** — Map visuals, hiding, atmosphere
 
 ---
 

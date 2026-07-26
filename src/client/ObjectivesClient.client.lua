@@ -13,6 +13,9 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local carryingFuel = false
+local hasKey = false
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ObjectivesUI"
 screenGui.ResetOnSpawn = false
@@ -22,7 +25,7 @@ local panel = Instance.new("Frame")
 panel.Name = "Panel"
 panel.AnchorPoint = Vector2.new(0, 0)
 panel.Position = UDim2.fromOffset(16, 120)
-panel.Size = UDim2.fromOffset(260, 130)
+panel.Size = UDim2.fromOffset(280, 130)
 panel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 panel.BackgroundTransparency = 0.2
 panel.Parent = screenGui
@@ -44,7 +47,7 @@ fuelLabel.Font = Enum.Font.Gotham
 fuelLabel.TextSize = 14
 fuelLabel.TextXAlignment = Enum.TextXAlignment.Left
 fuelLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
-fuelLabel.Text = "Fuel: 0/3"
+fuelLabel.Text = "Fuel deposited: 0/2"
 fuelLabel.Parent = panel
 
 local powerLabel = Instance.new("TextLabel")
@@ -83,7 +86,7 @@ carryLabel.Parent = panel
 local alertLabel = Instance.new("TextLabel")
 alertLabel.AnchorPoint = Vector2.new(0.5, 0)
 alertLabel.Position = UDim2.new(0.5, 0, 0, 14)
-alertLabel.Size = UDim2.fromOffset(500, 36)
+alertLabel.Size = UDim2.fromOffset(520, 36)
 alertLabel.BackgroundTransparency = 0.35
 alertLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 alertLabel.Font = Enum.Font.GothamBold
@@ -93,10 +96,8 @@ alertLabel.Text = ""
 alertLabel.Visible = false
 alertLabel.Parent = screenGui
 
-local function refreshLocal()
-	local carrying = player:GetAttribute(GameConfig.CarryingFuelAttribute) == true
-	local hasKey = player:GetAttribute(GameConfig.HasKeyAttribute) == true
-	carryLabel.Text = if carrying then "Carrying fuel cell" else ""
+local function refreshDisplay()
+	carryLabel.Text = if carryingFuel then ">> Carrying fuel cell <<" else ""
 	keyLabel.Text = if hasKey then "Key: Collected" else "Key: Not found"
 	keyLabel.TextColor3 = if hasKey
 		then Color3.fromRGB(80, 220, 120)
@@ -111,32 +112,50 @@ local function showAlert(message: string)
 	end)
 end
 
-local function updateFromState(state: { [string]: any })
+local function applyState(state: { [string]: any })
 	local deposited = state.cellsDeposited or 0
 	local required = state.cellsRequired or GameConfig.FuelCellsRequired
 	local on = state.powerOn == true
 
-	fuelLabel.Text = `Fuel: {deposited}/{required}`
+	if state.carryingFuel ~= nil then
+		carryingFuel = state.carryingFuel == true
+	end
+	if state.hasKey ~= nil then
+		hasKey = state.hasKey == true
+	end
+
+	fuelLabel.Text = `Fuel deposited: {deposited}/{required}`
 	powerLabel.Text = if on then "Power: ON" else "Power: OFF"
 	powerLabel.TextColor3 = if on
 		then Color3.fromRGB(80, 220, 120)
 		else Color3.fromRGB(180, 180, 180)
 
-	refreshLocal()
+	refreshDisplay()
 end
 
-Remotes.get("PowerStateUpdated").OnClientEvent:Connect(updateFromState)
+Remotes.get("PowerStateUpdated").OnClientEvent:Connect(applyState)
+Remotes.get("PlayerObjectivesUpdated").OnClientEvent:Connect(applyState)
 Remotes.get("PowerAlert").OnClientEvent:Connect(showAlert)
 
 Remotes.get("RoundStateChanged").OnClientEvent:Connect(function(state: string)
 	panel.Visible = state == "Playing"
-	if state ~= "Playing" then
+	if state == "Intermission" or state == "RoleReveal" then
+		carryingFuel = false
+		hasKey = false
 		alertLabel.Visible = false
+		refreshDisplay()
 	end
 end)
 
-player:GetAttributeChangedSignal(GameConfig.CarryingFuelAttribute):Connect(refreshLocal)
-player:GetAttributeChangedSignal(GameConfig.HasKeyAttribute):Connect(refreshLocal)
+player:GetAttributeChangedSignal(GameConfig.CarryingFuelAttribute):Connect(function()
+	carryingFuel = player:GetAttribute(GameConfig.CarryingFuelAttribute) == true
+	refreshDisplay()
+end)
+
+player:GetAttributeChangedSignal(GameConfig.HasKeyAttribute):Connect(function()
+	hasKey = player:GetAttribute(GameConfig.HasKeyAttribute) == true
+	refreshDisplay()
+end)
 
 panel.Visible = false
-refreshLocal()
+refreshDisplay()
