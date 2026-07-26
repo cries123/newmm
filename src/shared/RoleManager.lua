@@ -44,6 +44,8 @@ function RoleManager.clearRoles()
 		player:SetAttribute(GameConfig.EscapedAttribute, nil)
 		player:SetAttribute(GameConfig.HasGunAttribute, nil)
 		player:SetAttribute(GameConfig.StunnedAttribute, nil)
+		player:SetAttribute(GameConfig.HasKeyAttribute, nil)
+		player:SetAttribute(GameConfig.CarryingFuelAttribute, nil)
 	end
 end
 

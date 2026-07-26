@@ -21,8 +21,16 @@ Code is written in this repo with [Rojo](https://rojo.space/) and synced into Ro
 - **Death / spectator** — eliminated players spectate until the next round (arrow keys to switch)
 - **Instant win** — innocents win immediately when all murderers are eliminated
 
+### Phase 3 — Power & Doors
+- **Fuel cells** — pick up yellow cells, bring to generator (2 required)
+- **Generator** — deposit cells, hold to boot power (10 sec)
+- **Power decay** — power turns off after 2 minutes unless maintained
+- **Murderer sabotage** — murderers can shut down power at generator
+- **Office key** — pick up in office zone
+- **Main door** — needs power ON + key to unlock (walk north through door)
+- **Objectives UI** — top-left panel shows fuel/power/key status
+
 ### Coming next
-- **Phase 3** — power system, fuel cells, doors
 - **Phase 4** — escape zone and full win conditions
 
 ---
