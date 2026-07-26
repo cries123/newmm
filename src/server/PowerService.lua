@@ -233,28 +233,28 @@ local function updateGeneratorPrompts()
 		return
 	end
 
-	local mainPrompt = generator:FindFirstChild("MainPrompt") :: ProximityPrompt?
+	local depositPrompt = generator:FindFirstChild("DepositPrompt") :: ProximityPrompt?
+	local bootPrompt = generator:FindFirstChild("BootPrompt") :: ProximityPrompt?
+	local maintainPrompt = generator:FindFirstChild("MaintainPrompt") :: ProximityPrompt?
 	local sabotagePrompt = generator:FindFirstChild("SabotagePrompt") :: ProximityPrompt?
+	local playing = isPlaying()
+	local fuelReady = cellsDeposited >= GameConfig.FuelCellsRequired
 
-	if mainPrompt then
-		if powerOn then
-			mainPrompt.ActionText = "Maintain Power"
-			mainPrompt.ObjectText = "Generator (ON)"
-			mainPrompt.HoldDuration = 2
-		elseif cellsDeposited >= GameConfig.FuelCellsRequired then
-			mainPrompt.ActionText = "Boot Generator"
-			mainPrompt.ObjectText = "READY — HOLD E!"
-			mainPrompt.HoldDuration = GameConfig.GeneratorBootDuration
-		else
-			mainPrompt.ActionText = "Deposit Fuel Cell"
-			mainPrompt.ObjectText = `Generator ({cellsDeposited}/{GameConfig.FuelCellsRequired})`
-			mainPrompt.HoldDuration = 0
-		end
-		mainPrompt.Enabled = isPlaying()
+	if depositPrompt then
+		depositPrompt.ObjectText = `Generator ({cellsDeposited}/{GameConfig.FuelCellsRequired})`
+		depositPrompt.Enabled = playing and not powerOn and not fuelReady
+	end
+
+	if bootPrompt then
+		bootPrompt.Enabled = playing and not powerOn and fuelReady
+	end
+
+	if maintainPrompt then
+		maintainPrompt.Enabled = playing and powerOn
 	end
 
 	if sabotagePrompt then
-		sabotagePrompt.Enabled = isPlaying() and powerOn and sabotageUsesLeft > 0
+		sabotagePrompt.Enabled = playing and powerOn and sabotageUsesLeft > 0
 	end
 
 	updateGeneratorStatusLabel(generator)
@@ -344,23 +344,13 @@ local function onDepositFuelCell(player: Player)
 	end
 end
 
-local function onGeneratorInteract(player: Player)
-	if not isPlaying() then
-		return
-	end
-
-	if powerOn then
-		onMaintainPower(player)
+local function onDepositInteract(player: Player)
+	if not isPlaying() or powerOn then
 		return
 	end
 
 	if player:GetAttribute(GameConfig.CarryingFuelAttribute) == true then
 		onDepositFuelCell(player)
-		return
-	end
-
-	if cellsDeposited >= GameConfig.FuelCellsRequired then
-		onBootGenerator(player)
 		return
 	end
 
@@ -383,6 +373,7 @@ local function onBootGenerator(player: Player)
 	end
 
 	PowerService.turnOnPower()
+	Remotes.get("PowerAlert"):FireClient(player, "Generator booted! Power is ON.")
 end
 
 local function onMaintainPower(player: Player)
@@ -483,17 +474,44 @@ end
 local function setupGenerator(generator: BasePart)
 	generator:SetAttribute("CellsDeposited", 0)
 
-	local main = Instance.new("ProximityPrompt")
-	main.Name = "MainPrompt"
-	main.ActionText = "Deposit Fuel Cell"
-	main.ObjectText = "Generator"
-	main.HoldDuration = 0
-	main.MaxActivationDistance = 12
-	main.RequiresLineOfSight = false
-	main.KeyboardKeyCode = Enum.KeyCode.E
-	main.GamepadKeyCode = Enum.KeyCode.ButtonX
-	main.Parent = generator
-	connectNamedPrompt(generator, "MainPrompt", onGeneratorInteract)
+	local deposit = Instance.new("ProximityPrompt")
+	deposit.Name = "DepositPrompt"
+	deposit.ActionText = "Deposit Fuel Cell"
+	deposit.ObjectText = "Generator"
+	deposit.HoldDuration = 0
+	deposit.MaxActivationDistance = 12
+	deposit.RequiresLineOfSight = false
+	deposit.KeyboardKeyCode = Enum.KeyCode.E
+	deposit.GamepadKeyCode = Enum.KeyCode.ButtonX
+	deposit.Enabled = false
+	deposit.Parent = generator
+	connectNamedPrompt(generator, "DepositPrompt", onDepositInteract)
+
+	local boot = Instance.new("ProximityPrompt")
+	boot.Name = "BootPrompt"
+	boot.ActionText = "Boot Generator"
+	boot.ObjectText = "READY — HOLD E!"
+	boot.HoldDuration = GameConfig.GeneratorBootDuration
+	boot.MaxActivationDistance = 12
+	boot.RequiresLineOfSight = false
+	boot.KeyboardKeyCode = Enum.KeyCode.E
+	boot.GamepadKeyCode = Enum.KeyCode.ButtonX
+	boot.Enabled = false
+	boot.Parent = generator
+	connectNamedPrompt(generator, "BootPrompt", onBootGenerator)
+
+	local maintain = Instance.new("ProximityPrompt")
+	maintain.Name = "MaintainPrompt"
+	maintain.ActionText = "Maintain Power"
+	maintain.ObjectText = "Generator (ON)"
+	maintain.HoldDuration = 2
+	maintain.MaxActivationDistance = 12
+	maintain.RequiresLineOfSight = false
+	maintain.KeyboardKeyCode = Enum.KeyCode.E
+	maintain.GamepadKeyCode = Enum.KeyCode.ButtonX
+	maintain.Enabled = false
+	maintain.Parent = generator
+	connectNamedPrompt(generator, "MaintainPrompt", onMaintainPower)
 
 	local sabotage = Instance.new("ProximityPrompt")
 	sabotage.Name = "SabotagePrompt"
@@ -642,6 +660,10 @@ function PowerService.init()
 	end)
 	CollectionService:GetInstanceAddedSignal("Key"):Connect(function(inst)
 		task.defer(setupWorldObjects)
+	end)
+
+	Remotes.get("RequestBootGenerator").OnServerEvent:Connect(function(player: Player)
+		onBootGenerator(player)
 	end)
 
 	RoundManager.onStateChanged(function(state: GameConfig.RoundState)
