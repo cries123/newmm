@@ -71,8 +71,17 @@ function RoundManager.requestWinCheck()
 end
 
 function RoundManager.checkWinConditions(): WinResult?
+	local escapesRequired = RoleManager.getEscapesRequired()
+	local escapeCount = RoleManager.getEscapeCount()
 	local aliveGood = RoleManager.getAliveInnocentsAndSheriff()
 	local aliveMurderers = RoleManager.getAliveMurderers()
+
+	if escapeCount >= escapesRequired and currentState == "Playing" then
+		return {
+			winner = "Innocents",
+			reason = `{escapeCount} players escaped ({escapesRequired} required).`,
+		}
+	end
 
 	if #aliveMurderers == 0 and currentState == "Playing" then
 		return {
@@ -81,10 +90,10 @@ function RoundManager.checkWinConditions(): WinResult?
 		}
 	end
 
-	if #aliveGood == 0 then
+	if #aliveGood == 0 and escapeCount < escapesRequired then
 		return {
 			winner = "Murderers",
-			reason = "All innocents and the sheriff were eliminated.",
+			reason = "No one left to escape.",
 		}
 	end
 
@@ -186,9 +195,14 @@ function RoundManager.start()
 			end
 
 			if not roundWinner then
-				-- Timer ran out — innocents get a partial win if anyone is alive
+				local escapeCount = RoleManager.getEscapeCount()
+				local escapesRequired = RoleManager.getEscapesRequired()
 				local aliveGood = RoleManager.getAliveInnocentsAndSheriff()
-				if #aliveGood > 0 then
+
+				if escapeCount >= escapesRequired then
+					roundWinner = "Innocents"
+					roundEndReason = `{escapeCount} players escaped before time ran out.`
+				elseif #aliveGood > 0 then
 					roundWinner = "Innocents"
 					roundEndReason = "Time ran out with survivors still alive."
 				else

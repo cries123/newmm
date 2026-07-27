@@ -31,8 +31,10 @@ local GameConfig = {
 	PowerDecayDuration = 120,
 	MurdererSabotageUses = 2,
 
-	-- Win conditions
+	-- Escape / win (Phase 4)
 	EscapesRequiredForWin = 3,
+	EscapeHoldDuration = 3,
+	EscapeZoneRange = 14,
 
 	-- Attribute names (stored on Player)
 	RoleAttribute = "Role",

@@ -140,4 +140,40 @@ function RoleManager.getAliveMurderers(): { Player }
 	return result
 end
 
+function RoleManager.getEscapedInnocentsAndSheriff(): { Player }
+	local result: { Player } = {}
+	for _, player in Players:GetPlayers() do
+		local role = RoleManager.getRole(player)
+		if player:GetAttribute(GameConfig.EscapedAttribute) == true
+			and (role == "Innocent" or role == "Sheriff")
+		then
+			table.insert(result, player)
+		end
+	end
+	return result
+end
+
+function RoleManager.getEscapeCount(): number
+	return #RoleManager.getEscapedInnocentsAndSheriff()
+end
+
+function RoleManager.getGoodPlayerCount(): number
+	local count = 0
+	for _, player in Players:GetPlayers() do
+		local role = RoleManager.getRole(player)
+		if role == "Innocent" or role == "Sheriff" then
+			count += 1
+		end
+	end
+	return count
+end
+
+function RoleManager.getEscapesRequired(): number
+	local goodCount = RoleManager.getGoodPlayerCount()
+	if goodCount <= 0 then
+		return GameConfig.EscapesRequiredForWin
+	end
+	return math.min(GameConfig.EscapesRequiredForWin, math.max(1, goodCount - 1))
+end
+
 return RoleManager

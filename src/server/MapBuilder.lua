@@ -8,6 +8,9 @@ local Lighting = game:GetService("Lighting")
 
 local MapBuilder = {}
 
+-- Bumped when layout changes — check Output or Workspace.Map.MapVersion on Play
+local MAP_VERSION = "open-floor-v2"
+
 local WALL_H = 14
 local FLOOR_Y = 0
 
@@ -27,6 +30,7 @@ local COLORS = {
 	Key = Color3.fromRGB(220, 180, 40),
 	Door = Color3.fromRGB(90, 60, 35),
 	Desk = Color3.fromRGB(65, 45, 30),
+	Escape = Color3.fromRGB(50, 200, 100),
 }
 
 local B = {
@@ -241,11 +245,54 @@ local function light(parent: Instance, pos: Vector3)
 	pl.Parent = l
 end
 
+local function escapeZone(parent: Instance, pos: Vector3)
+	local z = part({
+		Name = "EscapeZone",
+		Size = Vector3.new(28, 0.6, 14),
+		Pos = pos,
+		Color = COLORS.Escape,
+		Material = Enum.Material.Neon,
+		Parent = parent,
+		CanCollide = false,
+	})
+	z.Transparency = 0.35
+	tag(z, "EscapeZone")
+end
+
+local function clearLegacyMapArtifacts()
+	-- Old MapBuilder versions used a "Rooms" folder; remove if a previous session left it behind
+	local legacyNames = { "Rooms", "Doors", "Facility", "MapStructure" }
+	for _, name in legacyNames do
+		local legacy = workspace:FindFirstChild(name)
+		if legacy then
+			legacy:Destroy()
+			warn(`[newmm] Removed legacy workspace folder: {name}`)
+		end
+	end
+
+	local map = workspace:FindFirstChild("Map")
+	if map then
+		for _, child in map:GetChildren() do
+			child:Destroy()
+		end
+	end
+end
+
 function MapBuilder.build()
-	local map = workspace:WaitForChild("Map") :: Folder
+	clearLegacyMapArtifacts()
+
+	local map = workspace:FindFirstChild("Map") :: Folder?
+	if not map then
+		map = Instance.new("Folder")
+		map.Name = "Map"
+		map.Parent = workspace
+	end
+
 	for _, c in map:GetChildren() do
 		c:Destroy()
 	end
+
+	map:SetAttribute("MapVersion", MAP_VERSION)
 
 	local base = workspace:FindFirstChild("Baseplate")
 	if base and base:IsA("BasePart") then
@@ -306,6 +353,7 @@ function MapBuilder.build()
 	generator(objectives, Vector3.new(-30, 3.5, 38))
 	fuelCell(objectives, "FuelCell3", Vector3.new(0, 2, 60))
 	door(objectives, Vector3.new(0, 6, B.DoorZ))
+	escapeZone(objectives, Vector3.new(0, 1.5, 74))
 
 	sign(structure, "LOBBY", Vector3.new(0, 8, -50))
 	sign(structure, "OFFICE", Vector3.new(-30, 8, 8))
@@ -313,6 +361,7 @@ function MapBuilder.build()
 	sign(structure, "CAFETERIA", Vector3.new(30, 8, 15))
 	sign(structure, "GENERATOR", Vector3.new(-30, 8, 38))
 	sign(structure, "BACK HALL", Vector3.new(0, 8, 60))
+	sign(structure, "ESCAPE", Vector3.new(0, 8, 74))
 
 	light(structure, Vector3.new(0, 13, -50))
 	light(structure, Vector3.new(-30, 13, 8))
@@ -322,8 +371,12 @@ function MapBuilder.build()
 	light(structure, Vector3.new(0, 13, 20))
 	light(structure, Vector3.new(0, 13, 60))
 
-	print("[newmm] MapBuilder — open floor plan ready.")
+	print(`[newmm] MapBuilder {MAP_VERSION} — open floor plan ready (NO sealed rooms).`)
 	return map
+end
+
+function MapBuilder.getVersion(): string
+	return MAP_VERSION
 end
 
 return MapBuilder

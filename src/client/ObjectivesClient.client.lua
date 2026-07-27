@@ -25,7 +25,7 @@ local panel = Instance.new("Frame")
 panel.Name = "Panel"
 panel.AnchorPoint = Vector2.new(0, 0)
 panel.Position = UDim2.fromOffset(16, 120)
-panel.Size = UDim2.fromOffset(280, 130)
+panel.Size = UDim2.fromOffset(280, 152)
 panel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 panel.BackgroundTransparency = 0.2
 panel.Parent = screenGui
@@ -83,6 +83,17 @@ carryLabel.TextColor3 = Color3.fromRGB(120, 200, 255)
 carryLabel.Text = ""
 carryLabel.Parent = panel
 
+local escapeLabel = Instance.new("TextLabel")
+escapeLabel.Size = UDim2.new(1, -12, 0, 22)
+escapeLabel.Position = UDim2.fromOffset(6, 120)
+escapeLabel.BackgroundTransparency = 1
+escapeLabel.Font = Enum.Font.Gotham
+escapeLabel.TextSize = 14
+escapeLabel.TextXAlignment = Enum.TextXAlignment.Left
+escapeLabel.TextColor3 = Color3.fromRGB(80, 220, 140)
+escapeLabel.Text = "Escapes: 0/2"
+escapeLabel.Parent = panel
+
 local alertLabel = Instance.new("TextLabel")
 alertLabel.AnchorPoint = Vector2.new(0.5, 0)
 alertLabel.Position = UDim2.new(0.5, 0, 0, 14)
@@ -112,6 +123,22 @@ local function showAlert(message: string)
 	end)
 end
 
+local function applyEscapeState(state: { [string]: any })
+	local escaped = state.escapedCount or 0
+	local required = state.escapesRequired or GameConfig.EscapesRequiredForWin
+	local doorOpen = state.doorUnlocked == true
+	local youEscaped = state.localEscaped == true
+
+	escapeLabel.Text = if youEscaped
+		then "YOU ESCAPED!"
+		else `Escapes: {escaped}/{required}`
+	escapeLabel.TextColor3 = if youEscaped
+		then Color3.fromRGB(80, 255, 120)
+		elseif doorOpen
+		then Color3.fromRGB(80, 220, 140)
+		else Color3.fromRGB(140, 140, 140)
+end
+
 local function applyState(state: { [string]: any })
 	local deposited = state.cellsDeposited or 0
 	local required = state.cellsRequired or GameConfig.FuelCellsRequired
@@ -136,6 +163,16 @@ end
 Remotes.get("PowerStateUpdated").OnClientEvent:Connect(applyState)
 Remotes.get("PlayerObjectivesUpdated").OnClientEvent:Connect(applyState)
 Remotes.get("PowerAlert").OnClientEvent:Connect(showAlert)
+Remotes.get("EscapeStateUpdated").OnClientEvent:Connect(applyEscapeState)
+Remotes.get("EscapeAlert").OnClientEvent:Connect(showAlert)
+
+Remotes.get("PlayerEscaped").OnClientEvent:Connect(function(escapedPlayer: Player)
+	if escapedPlayer == player then
+		escapeLabel.Text = "YOU ESCAPED!"
+		escapeLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+		showAlert("You escaped! Spectating until round ends.")
+	end
+end)
 
 Remotes.get("RoundStateChanged").OnClientEvent:Connect(function(state: string)
 	panel.Visible = state == "Playing"

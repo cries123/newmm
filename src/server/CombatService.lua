@@ -229,6 +229,11 @@ local function enterSpectator(player: Player)
 	player.CharacterAutoLoads = false
 end
 
+function CombatService.setPlayerSpectating(player: Player)
+	enterSpectator(player)
+	broadcastCombatState(player)
+end
+
 function CombatService.killPlayer(victim: Player, killer: Player?)
 	if not PlayerUtils.isAlive(victim) then
 		return

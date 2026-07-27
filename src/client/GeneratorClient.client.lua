@@ -2,19 +2,23 @@
 --[[
 	GeneratorClient
 	Progressive lighting while holding E to boot the generator.
-	Also fires RequestBootGenerator when the hold completes (reliable vs server-only prompts).
+	Uses ProximityPromptService + direct E-key hold so boot works even if prompt hook timing fails.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local GameConfig = require(ReplicatedStorage.Shared.GameConfig)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local player = Players.LocalPlayer
+
+local BOOT_RANGE = 14
 
 local defaultAmbient = Lighting.Ambient
 local defaultBrightness = Lighting.Brightness
@@ -23,10 +27,15 @@ local powerBrightness = 1.6
 local generatorLightBrightness = 2.5
 local mapLightBrightness = 1.2
 
+local cellsDeposited = 0
+local cellsRequired = GameConfig.FuelCellsRequired
+local powerOn = false
+
 local holdingBoot = false
 local holdCompleted = false
+local bootRequestSent = false
 local holdConnection: RBXScriptConnection? = nil
-local bootPrompt: ProximityPrompt? = nil
+local bootDuration = GameConfig.GeneratorBootDuration
 
 local function getGenerator(): BasePart?
 	for _, inst in CollectionService:GetTagged("Generator") do
@@ -35,6 +44,31 @@ local function getGenerator(): BasePart?
 		end
 	end
 	return nil
+end
+
+local function getRootPart(): BasePart?
+	local character = player.Character
+	if not character then
+		return nil
+	end
+	return character:FindFirstChild("HumanoidRootPart") :: BasePart?
+end
+
+local function isBootReady(): boolean
+	return not powerOn and cellsDeposited >= cellsRequired
+end
+
+local function isNearGenerator(): boolean
+	local generator = getGenerator()
+	local root = getRootPart()
+	if not generator or not root then
+		return false
+	end
+	return (root.Position - generator.Position).Magnitude <= BOOT_RANGE
+end
+
+local function canStartBoot(): boolean
+	return isBootReady() and isNearGenerator()
 end
 
 local function setBootPreview(progress: number)
@@ -74,21 +108,31 @@ local function stopHoldLoop()
 	holdingBoot = false
 end
 
-local function onBootHoldBegan()
-	if holdingBoot then
+local function completeBoot()
+	if bootRequestSent or not isBootReady() then
 		return
 	end
+	bootRequestSent = true
+	holdCompleted = true
+	stopHoldLoop()
+	setBootPreview(1)
+	Remotes.get("RequestBootGenerator"):FireServer()
+end
 
-	local prompt = bootPrompt
-	if not prompt then
+local onBootHoldEnded: () -> ()
+
+local function onBootHoldBegan(duration: number?)
+	if holdingBoot or not canStartBoot() then
 		return
 	end
 
 	holdingBoot = true
 	holdCompleted = false
-	local duration = prompt.HoldDuration
-	if duration <= 0 then
-		duration = GameConfig.GeneratorBootDuration
+	bootRequestSent = false
+
+	local durationSeconds = duration or bootDuration
+	if durationSeconds <= 0 then
+		durationSeconds = bootDuration
 	end
 
 	local startedAt = os.clock()
@@ -97,19 +141,21 @@ local function onBootHoldBegan()
 			return
 		end
 
-		local progress = (os.clock() - startedAt) / duration
+		if not canStartBoot() then
+			onBootHoldEnded()
+			return
+		end
+
+		local progress = (os.clock() - startedAt) / durationSeconds
 		setBootPreview(progress)
 
 		if progress >= 1 then
-			holdCompleted = true
-			stopHoldLoop()
-			setBootPreview(1)
-			Remotes.get("RequestBootGenerator"):FireServer()
+			completeBoot()
 		end
 	end)
 end
 
-local function onBootHoldEnded()
+onBootHoldEnded = function()
 	if holdCompleted then
 		return
 	end
@@ -117,67 +163,67 @@ local function onBootHoldEnded()
 	resetBootPreview()
 end
 
-local function hookBootPrompt(prompt: ProximityPrompt)
-	if prompt:GetAttribute("BootClientHooked") then
+ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt: ProximityPrompt, triggeringPlayer: Player)
+	if triggeringPlayer ~= player or prompt.Name ~= "BootPrompt" then
 		return
 	end
-	prompt:SetAttribute("BootClientHooked", true)
-	bootPrompt = prompt
+	bootDuration = if prompt.HoldDuration > 0 then prompt.HoldDuration else GameConfig.GeneratorBootDuration
+	onBootHoldBegan(bootDuration)
+end)
 
-	prompt.PromptButtonHoldBegan:Connect(function(triggeringPlayer: Player)
-		if triggeringPlayer == player then
-			onBootHoldBegan()
-		end
-	end)
-
-	prompt.PromptButtonHoldEnded:Connect(function(triggeringPlayer: Player)
-		if triggeringPlayer == player then
-			onBootHoldEnded()
-		end
-	end)
-
-	prompt.Triggered:Connect(function(triggeringPlayer: Player)
-		if triggeringPlayer == player then
-			holdCompleted = true
-			stopHoldLoop()
-			setBootPreview(1)
-		end
-	end)
-end
-
-local function setupGenerator(generator: BasePart)
-	local prompt = generator:FindFirstChild("BootPrompt") :: ProximityPrompt?
-	if prompt then
-		hookBootPrompt(prompt)
+ProximityPromptService.PromptButtonHoldEnded:Connect(function(prompt: ProximityPrompt, triggeringPlayer: Player)
+	if triggeringPlayer ~= player or prompt.Name ~= "BootPrompt" then
+		return
 	end
-end
+	onBootHoldEnded()
+end)
 
-for _, inst in CollectionService:GetTagged("Generator") do
-	if inst:IsA("BasePart") then
-		setupGenerator(inst)
+ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, triggeringPlayer: Player)
+	if triggeringPlayer ~= player or prompt.Name ~= "BootPrompt" then
+		return
 	end
-end
+	completeBoot()
+end)
 
-CollectionService:GetInstanceAddedSignal("Generator"):Connect(function(inst)
-	if inst:IsA("BasePart") then
-		task.defer(function()
-			setupGenerator(inst)
-		end)
+UserInputService.InputBegan:Connect(function(input: InputObject, _gameProcessed: boolean)
+	if input.KeyCode ~= Enum.KeyCode.E then
+		return
+	end
+	if canStartBoot() and not holdingBoot then
+		onBootHoldBegan()
 	end
 end)
 
-Remotes.get("PowerStateUpdated").OnClientEvent:Connect(function(state: { [string]: any })
-	if state.powerOn == true then
+UserInputService.InputEnded:Connect(function(input: InputObject, _gameProcessed: boolean)
+	if input.KeyCode == Enum.KeyCode.E then
+		onBootHoldEnded()
+	end
+end)
+
+local function applyPowerState(state: { [string]: any })
+	cellsDeposited = state.cellsDeposited or cellsDeposited
+	cellsRequired = state.cellsRequired or cellsRequired
+	powerOn = state.powerOn == true
+
+	if powerOn then
+		bootRequestSent = false
+		holdCompleted = false
 		stopHoldLoop()
 		setBootPreview(1)
 	elseif not holdingBoot then
+		bootRequestSent = false
 		resetBootPreview()
 	end
-end)
+end
+
+Remotes.get("PowerStateUpdated").OnClientEvent:Connect(applyPowerState)
 
 Remotes.get("RoundStateChanged").OnClientEvent:Connect(function(state: string)
 	if state ~= "Playing" then
+		bootRequestSent = false
 		holdCompleted = false
+		cellsDeposited = 0
+		powerOn = false
 		stopHoldLoop()
 		resetBootPreview()
 	end
