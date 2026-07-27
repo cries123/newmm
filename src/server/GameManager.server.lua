@@ -18,4 +18,4 @@ PowerService.init()
 CombatService.init()
 RoundManager.start()
 
-print("[newmm] GameManager started — map, power, combat, and rounds running.")
+print(`[newmm] GameManager started — map {MapBuilder.getVersion()}, power, combat, and rounds running.`)
