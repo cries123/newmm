@@ -30,6 +30,7 @@ local COLORS = {
 	Key = Color3.fromRGB(220, 180, 40),
 	Door = Color3.fromRGB(90, 60, 35),
 	Desk = Color3.fromRGB(65, 45, 30),
+	Escape = Color3.fromRGB(50, 200, 100),
 }
 
 local B = {
@@ -244,6 +245,20 @@ local function light(parent: Instance, pos: Vector3)
 	pl.Parent = l
 end
 
+local function escapeZone(parent: Instance, pos: Vector3)
+	local z = part({
+		Name = "EscapeZone",
+		Size = Vector3.new(28, 0.6, 14),
+		Pos = pos,
+		Color = COLORS.Escape,
+		Material = Enum.Material.Neon,
+		Parent = parent,
+		CanCollide = false,
+	})
+	z.Transparency = 0.35
+	tag(z, "EscapeZone")
+end
+
 local function clearLegacyMapArtifacts()
 	-- Old MapBuilder versions used a "Rooms" folder; remove if a previous session left it behind
 	local legacyNames = { "Rooms", "Doors", "Facility", "MapStructure" }
@@ -338,6 +353,7 @@ function MapBuilder.build()
 	generator(objectives, Vector3.new(-30, 3.5, 38))
 	fuelCell(objectives, "FuelCell3", Vector3.new(0, 2, 60))
 	door(objectives, Vector3.new(0, 6, B.DoorZ))
+	escapeZone(objectives, Vector3.new(0, 1.5, 74))
 
 	sign(structure, "LOBBY", Vector3.new(0, 8, -50))
 	sign(structure, "OFFICE", Vector3.new(-30, 8, 8))
@@ -345,6 +361,7 @@ function MapBuilder.build()
 	sign(structure, "CAFETERIA", Vector3.new(30, 8, 15))
 	sign(structure, "GENERATOR", Vector3.new(-30, 8, 38))
 	sign(structure, "BACK HALL", Vector3.new(0, 8, 60))
+	sign(structure, "ESCAPE", Vector3.new(0, 8, 74))
 
 	light(structure, Vector3.new(0, 13, -50))
 	light(structure, Vector3.new(-30, 13, 8))

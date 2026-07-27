@@ -23,7 +23,7 @@ Code is written in this repo with [Rojo](https://rojo.space/) and synced into Ro
 
 ### Phase 3 — Power & Doors
 - **Fuel cells** — pick up yellow cells, bring to generator (2 required)
-- **Generator** — deposit cells, hold to boot power (10 sec)
+- **Generator** — deposit cells, hold to boot power (5 sec)
 - **Power decay** — power turns off after 2 minutes unless maintained
 - **Murderer sabotage** — murderers can shut down power at generator
 - **Office key** — pick up in office zone

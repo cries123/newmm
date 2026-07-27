@@ -85,6 +85,12 @@ Remotes.get("PlayerDied").OnClientEvent:Connect(function(victim: Player?)
 	end
 end)
 
+Remotes.get("PlayerEscaped").OnClientEvent:Connect(function(escapedPlayer: Player?)
+	if escapedPlayer == player then
+		startSpectating()
+	end
+end)
+
 Remotes.get("RoundStateChanged").OnClientEvent:Connect(function(state: string)
 	if state == "Intermission" or state == "RoleReveal" then
 		stopSpectating()

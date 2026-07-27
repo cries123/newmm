@@ -53,6 +53,12 @@ function Remotes.init()
 	getOrCreateRemote("PowerAlert", "RemoteEvent")
 	getOrCreateRemote("PlayerObjectivesUpdated", "RemoteEvent")
 	getOrCreateRemote("RequestBootGenerator", "RemoteEvent")
+
+	-- Phase 4: escape
+	getOrCreateRemote("EscapeStateUpdated", "RemoteEvent")
+	getOrCreateRemote("PlayerEscaped", "RemoteEvent")
+	getOrCreateRemote("RequestEscape", "RemoteEvent")
+	getOrCreateRemote("EscapeAlert", "RemoteEvent")
 end
 
 function Remotes.get(name: string): RemoteEvent
